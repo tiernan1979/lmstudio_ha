@@ -1,7 +1,6 @@
 import asyncio
 import time
 
-
 class ToolExecutor:
     def __init__(self, hass):
         self.hass = hass

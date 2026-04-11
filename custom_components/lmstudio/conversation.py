@@ -6,7 +6,6 @@ from .model_router import ModelRouter
 from .tool_executor import ToolExecutor
 from .memory import Memory
 
-
 class LMStudioAgent(AbstractConversationAgent):
 
     def __init__(self, hass, client):
