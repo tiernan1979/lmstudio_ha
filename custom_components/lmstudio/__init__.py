@@ -1,25 +1,44 @@
-from .api import LMStudioClient
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.core import HomeAssistant
+from homeassistant.components import conversation
+
+from .client import LMStudioClient
 from .conversation import LMStudioAgent
-from .const import DOMAIN, CONF_IDLE_TIMEOUT
+from .model_manager import ModelManager
+
+DOMAIN = "lmstudio"
 
 
-async def async_setup_entry(hass, entry):
-    client = LMStudioClient(entry.data["url"])
+async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
 
-    hass.data["lmstudio"] = {
+    hass.data.setdefault(DOMAIN, {})
+
+    client = LMStudioClient(entry.data)
+
+    model_manager = ModelManager(hass, client, entry.entry_id)
+
+    agent = LMStudioAgent(
+        hass=hass,
+        client=client,
+        entry_id=entry.entry_id,
+        model_manager=model_manager,
+    )
+
+    hass.data[DOMAIN][entry.entry_id] = {
         "client": client,
-        "selected_model": entry.data["model"],
+        "agent": agent,
+        "model": entry.data["model"],
         "system_prompt": entry.data["system_prompt"],
+        "idle_timeout": entry.data.get("idle_timeout", 300),
+        "last_used": 0,
+
+        # ✅ NEW FLAGS (FROM CONFIG FLOW)
         "streaming": entry.data.get("streaming", True),
         "thinking": entry.data.get("thinking", False),
-        "idle_timeout": entry.data.get("idle_timeout", 5),
-        "last_used": 0,
-        "tool_running": False,
+
+        "model_manager": model_manager,
     }
 
-    hass.data[DOMAIN]["manager"] = None  # set later
-
-    agent = LMStudioAgent(hass, client)
-    hass.data["conversation"] = agent
+    conversation.async_set_agent(hass, agent)
 
     return True

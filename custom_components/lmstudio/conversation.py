@@ -3,121 +3,62 @@ from homeassistant.helpers.intent import IntentResponse
 
 import time
 
-from .model_manager import ModelManager
-from .tool_executor import ToolExecutor
-from .memory import Memory
-
 
 class LMStudioAgent(AbstractConversationAgent):
 
-    # ─────────────────────────────
-    # REQUIRED BY HOME ASSISTANT
-    # ─────────────────────────────
     @property
     def supported_languages(self):
         return ["en"]
 
-    # ─────────────────────────────
-    def __init__(self, hass, client):
+    def __init__(self, hass, client, entry_id, model_manager):
         self.hass = hass
         self.client = client
+        self.entry_id = entry_id
+        self.model_manager = model_manager
 
-        self.memory = Memory()
-        self.manager = ModelManager(hass, client)
-        self.tools = ToolExecutor(hass)
-
-    # ─────────────────────────────
-    # MAIN ENTRY
-    # ─────────────────────────────
     async def async_process(self, text, context, conversation_id=None):
 
-        state = self.hass.data["lmstudio"]
+        state = self.hass.data["lmstudio"][self.entry_id]
 
-        # activity timer (idle unload system)
         state["last_used"] = time.time()
 
-        cid = conversation_id or "default"
+        model = state["model"]
 
-        # ─────────────────────────────
-        # SINGLE SOURCE OF TRUTH MODEL
-        # ─────────────────────────────
-        model = state.get("selected_model")
-
-        await self.manager.ensure_model(model)
-
-        # memory add user message
-        self.memory.add(cid, "user", text)
+        await self.model_manager.ensure_model(model)
 
         messages = [
-            {"role": "system", "content": state.get("system_prompt", "")},
-            *self.memory.get(cid, limit=10),
+            {"role": "system", "content": state["system_prompt"]},
+            {"role": "user", "content": text},
         ]
 
-        # ─────────────────────────────
-        # FIRST LM CALL
-        # ─────────────────────────────
-        result = await self.client.chat(model, messages)
-
-        message = result["choices"][0]["message"]
-
-        content = message.get("content", "")
-        tool_calls = message.get("tool_calls", [])
+        streaming_enabled = state.get("streaming", True)
 
         # ─────────────────────────────
-        # TOOL EXECUTION (WITH FEEDBACK LOOP)
+        # STREAMING PATH
         # ─────────────────────────────
-        if tool_calls:
+        if streaming_enabled:
 
-            # mark tool running (prevents idle unload)
-            state["tool_running"] = True
+            buffer = []
 
-            try:
-                # execute tools
-                results = await self.tools.execute_tool_calls(tool_calls)
+            async def on_delta(token):
+                buffer.append(token)
 
-            finally:
-                state["tool_running"] = False
-                state["last_used"] = time.time()
+            full = await self.client.chat_stream(
+                model,
+                messages,
+                on_delta
+            )
 
-            # build tool feedback messages
-            tool_messages = []
+            content = full
 
-            for r in results:
-                tool_messages.append({
-                    "role": "tool",
-                    "content": {
-                        "tool": r.get("name"),
-                        "success": r.get("success"),
-                        "result": r.get("result"),
-                        "error": r.get("error"),
-                    }
-                })
-
-            # ─────────────────────────────
-            # SECOND LM CALL (FEEDBACK LOOP)
-            # ─────────────────────────────
-            messages = [
-                {"role": "system", "content": state.get("system_prompt", "")},
-                *self.memory.get(cid, limit=10),
-                *tool_messages,
-            ]
-
-            result = await self.client.chat(model, messages)
-
-            final_message = result["choices"][0]["message"]["content"]
-
-            response_text = final_message
-
+        # ─────────────────────────────
+        # NORMAL PATH
+        # ─────────────────────────────
         else:
-            response_text = content
+            result = await self.client.chat(model, messages)
+            content = result["choices"][0]["message"]["content"]
 
-        # store assistant response
-        self.memory.add(cid, "assistant", response_text)
-
-        # ─────────────────────────────
-        # RETURN TO HOME ASSISTANT
-        # ─────────────────────────────
         response = IntentResponse(language="en")
-        response.async_set_speech(response_text)
+        response.async_set_speech(content)
 
         return response
