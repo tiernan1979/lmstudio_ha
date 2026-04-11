@@ -62,3 +62,8 @@ class LMStudioAgent(AbstractConversationAgent):
         response.async_set_speech(content)
 
         return response
+    
+    async def async_will_remove_from_hass(self):
+        """When the agent is removed."""
+        conversation.async_unset_agent(self.hass, self.entry)
+        await super().async_will_remove_from_hass()

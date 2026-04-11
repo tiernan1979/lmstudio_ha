@@ -39,6 +39,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
         "model_manager": model_manager,
     }
 
-    conversation.async_set_default_agent(hass, agent)
+    conversation.async_set_agent(hass, entry, agent)
 
+    return True
+
+async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    agent = hass.data[DOMAIN].pop(entry.entry_id, None)
+    if agent:
+        conversation.async_unset_agent(hass, entry)
+    # unload other platforms if you have them
     return True
