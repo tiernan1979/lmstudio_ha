@@ -128,15 +128,31 @@ class LMStudioConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def _test_connection(self, url, api_key=None):
         try:
             headers = {}
+
             if api_key:
                 headers["Authorization"] = f"Bearer {api_key}"
 
-            async with aiohttp.ClientSession() as session:
+            timeout = aiohttp.ClientTimeout(total=5)
+
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+
+                # ✅ STEP 1: try models endpoint (best signal)
                 async with session.get(
                     f"{url}/v1/models",
                     headers=headers,
                 ) as resp:
-                    return resp.status == 200
+
+                    # Accept ANY valid HTTP response (not just 200 strict)
+                    if resp.status >= 200 and resp.status < 500:
+                        await resp.text()  # force read to ensure connection is real
+                        return True
+
+                # ❌ fallback: try base URL ping
+                async with session.get(url, headers=headers) as resp:
+                    if resp.status >= 200:
+                        return True
+
+            return False
 
         except Exception:
             return False
