@@ -67,7 +67,6 @@ class ModelManager:
 
                 # idle check
                 idle_time = time.time() - last_used
-
                 if idle_time > timeout_seconds:
                     await self._unload_model()
                     return
