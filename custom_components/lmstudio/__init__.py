@@ -39,6 +39,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
         "model_manager": model_manager,
     }
 
-    conversation.async_set_agent(hass, agent)
+    conversation.async_set_default_agent(hass, agent)
 
     return True
