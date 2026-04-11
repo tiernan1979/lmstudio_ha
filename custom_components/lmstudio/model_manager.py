@@ -6,10 +6,19 @@ class ModelManager:
     def __init__(self, hass, client):
         self.hass = hass
         self.client = client
+        self._watch_task = None
+        self._initialized = False
 
         # single background task handle
         self._watch_task = None
 
+
+    def _ensure_watcher_started(self):
+        if self._initialized:
+            return
+
+        self._initialized = True
+        self._start_idle_watcher()
     # ─────────────────────────────────────────
     # CALLED BEFORE EVERY CHAT
     # ─────────────────────────────────────────
@@ -19,6 +28,8 @@ class ModelManager:
         # mark activity (THIS IS IMPORTANT)
         state["last_used"] = time.time()
 
+        self._ensure_watcher_started()  # ✅ ALWAYS RUNS
+        
         # already loaded → do nothing
         if state.get("loaded_model") == model:
             return
