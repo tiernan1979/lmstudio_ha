@@ -3,6 +3,7 @@
     "step": {
       "user": {
         "title": "Connect to LM Studio",
+        "description": "Enter the URL of your running LM Studio instance.",
         "data": {
           "url": "LM Studio URL",
           "api_key": "API Key (optional)"
@@ -25,6 +26,21 @@
     },
     "abort": {
       "already_configured": "LM Studio is already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "options": {
+        "title": "LM Studio Options",
+        "description": "Update your LM Studio configuration.",
+        "data": {
+          "model": "Model",
+          "system_prompt": "System Prompt",
+          "idle_timeout": "Idle Timeout (minutes)",
+          "streaming": "Enable Streaming",
+          "thinking": "Thinking Mode"
+        }
+      }
     }
   }
 }

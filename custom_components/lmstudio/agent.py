@@ -1,15 +1,15 @@
 from __future__ import annotations
-import json
 import time
 import logging
 
 from homeassistant.components.conversation import (
-    AbstractConversationAgent,
+    ConversationEntity,
     ConversationInput,
     ConversationResult,
 )
 from homeassistant.helpers.intent import IntentResponse
 from homeassistant.core import HomeAssistant
+from homeassistant.config_entries import ConfigEntry
 
 from .const import DOMAIN, HA_TOOLS
 from .memory import Memory
@@ -19,16 +19,32 @@ from .tool_executor import ToolExecutor
 _LOGGER = logging.getLogger(__name__)
 
 
-class LMStudioAgent(AbstractConversationAgent):
+class LMStudioAgent(ConversationEntity):
 
-    def __init__(self, hass: HomeAssistant, client, entry_id: str, model_manager):
+    _attr_has_entity_name = True
+    _attr_should_poll = False
+
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        client,
+        entry_id: str,
+        model_manager,
+        entry: ConfigEntry,
+    ):
         self.hass = hass
         self.client = client
         self.entry_id = entry_id
         self.model_manager = model_manager
+        self._entry = entry
         self._memory = Memory()
         self._router = ModelRouter()
         self._tools = ToolExecutor(hass, entry_id)
+
+        model = entry.data.get("model", "LM Studio")
+        self._attr_name = f"LM Studio ({model})"
+        self._attr_unique_id = entry.entry_id
+        self._attr_supported_features = 0
 
     @property
     def supported_languages(self) -> list[str]:
@@ -58,17 +74,15 @@ class LMStudioAgent(AbstractConversationAgent):
 
         content = ""
         try:
-            # First pass — send with tools so LLM can request device control
+            # First pass — include tools so LLM can request device control
             result = await self.client.chat(model, messages, tools=HA_TOOLS)
             choice = result["choices"][0]
-            finish_reason = choice.get("finish_reason")
 
-            if finish_reason == "tool_calls":
-                # Execute whatever the LLM asked for
+            if choice.get("finish_reason") == "tool_calls":
                 tool_calls = choice["message"]["tool_calls"]
                 await self._tools.execute_tool_calls(tool_calls)
 
-                # Append the assistant tool_call message + a tool result
+                # Give LLM the tool result so it can respond naturally
                 messages.append(choice["message"])
                 messages.append({
                     "role": "tool",
@@ -76,7 +90,6 @@ class LMStudioAgent(AbstractConversationAgent):
                     "content": "Done.",
                 })
 
-                # Second pass — get natural language confirmation
                 followup = await self.client.chat(model, messages)
                 content = followup["choices"][0]["message"]["content"]
 

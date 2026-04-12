@@ -2,6 +2,7 @@ from __future__ import annotations
 import json
 import logging
 from typing import AsyncGenerator
+
 import aiohttp
 
 _LOGGER = logging.getLogger(__name__)
@@ -17,7 +18,15 @@ class LMStudioClient:
     def _headers(self) -> dict:
         return {"Authorization": f"Bearer {self.api_key}"} if self.api_key else {}
 
-    async def chat(self, model: str, messages: list, tools: list | None = None) -> dict:
+    # ─────────────────────────────
+    # NON-STREAMING CHAT
+    # ─────────────────────────────
+    async def chat(
+        self,
+        model: str,
+        messages: list,
+        tools: list | None = None,
+    ) -> dict:
         payload: dict = {
             "model": model,
             "messages": messages,
@@ -36,7 +45,15 @@ class LMStudioClient:
                 resp.raise_for_status()
                 return await resp.json()
 
-    async def chat_stream(self, model: str, messages: list) -> AsyncGenerator[str, None]:
+    # ─────────────────────────────
+    # STREAMING CHAT
+    # ─────────────────────────────
+    async def chat_stream(
+        self,
+        model: str,
+        messages: list,
+    ) -> AsyncGenerator[str, None]:
+        """Async generator — yields tokens as they arrive."""
         async with aiohttp.ClientSession() as session:
             async with session.post(
                 f"{self.url}/v1/chat/completions",
@@ -65,6 +82,9 @@ class LMStudioClient:
                     except Exception:
                         continue
 
+    # ─────────────────────────────
+    # MODEL MANAGEMENT
+    # ─────────────────────────────
     async def list_models(self) -> dict:
         async with aiohttp.ClientSession() as session:
             async with session.get(

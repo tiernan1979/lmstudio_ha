@@ -2,7 +2,7 @@ DOMAIN = "lmstudio"
 
 CONF_URL = "url"
 CONF_MODEL = "model"
-CONF_PROMPT = "system_prompt"   # key stored in entry.data
+CONF_PROMPT = "system_prompt"   # key stored in entry.data / entry.options
 CONF_IDLE_TIMEOUT = "idle_timeout"
 
 DEFAULT_IDLE_TIMEOUT = 5
@@ -14,7 +14,7 @@ HA_TOOLS = [
         "type": "function",
         "function": {
             "name": "turn_on",
-            "description": "Turn on a Home Assistant entity",
+            "description": "Turn on a Home Assistant entity such as a light, switch, or scene",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -31,7 +31,7 @@ HA_TOOLS = [
         "type": "function",
         "function": {
             "name": "turn_off",
-            "description": "Turn off a Home Assistant entity",
+            "description": "Turn off a Home Assistant entity such as a light, switch, or scene",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -48,13 +48,22 @@ HA_TOOLS = [
         "type": "function",
         "function": {
             "name": "call_service",
-            "description": "Call any Home Assistant service",
+            "description": "Call any Home Assistant service for advanced control",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "domain": {"type": "string", "description": "Service domain, e.g. light"},
-                    "service": {"type": "string", "description": "Service name, e.g. turn_on"},
-                    "data": {"type": "object", "description": "Service data payload"},
+                    "domain": {
+                        "type": "string",
+                        "description": "Service domain, e.g. light, climate, media_player",
+                    },
+                    "service": {
+                        "type": "string",
+                        "description": "Service name, e.g. turn_on, set_temperature",
+                    },
+                    "data": {
+                        "type": "object",
+                        "description": "Optional service data payload",
+                    },
                 },
                 "required": ["domain", "service"],
             },
