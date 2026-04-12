@@ -1,5 +1,6 @@
 from homeassistant.components import conversation as ha_conversation  # ← alias it
 from .agent import LMStudioAgent
+from .const import DOMAIN
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data.setdefault(DOMAIN, {})
