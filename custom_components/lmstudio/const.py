@@ -2,13 +2,12 @@ DOMAIN = "lmstudio"
 
 CONF_URL = "url"
 CONF_MODEL = "model"
-CONF_PROMPT = "system_prompt"   # key stored in entry.data / entry.options
+CONF_PROMPT = "system_prompt"
 CONF_IDLE_TIMEOUT = "idle_timeout"
 
 DEFAULT_IDLE_TIMEOUT = 5
 DEFAULT_PROMPT = "You are a helpful smart home assistant."
 
-# OpenAI-compatible tool definitions sent to the LLM
 HA_TOOLS = [
     {
         "type": "function",

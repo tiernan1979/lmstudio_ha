@@ -2,9 +2,11 @@ from __future__ import annotations
 import time
 import logging
 
+from homeassistant.components import conversation
 from homeassistant.components.conversation import (
     ConversationEntity,
     ConversationEntityFeature,
+    AbstractConversationAgent,
     ConversationInput,
     ConversationResult,
     ChatLog,
@@ -21,11 +23,11 @@ from .tool_executor import ToolExecutor
 _LOGGER = logging.getLogger(__name__)
 
 
-class LMStudioAgent(ConversationEntity):
+class LMStudioAgent(ConversationEntity, AbstractConversationAgent):
+    """LM Studio conversation agent."""
 
     _attr_has_entity_name = True
     _attr_should_poll = False
-    # This flag is what makes the agent selectable in Voice Assistant settings
     _attr_supported_features = ConversationEntityFeature.CONTROL
 
     def __init__(
@@ -53,6 +55,16 @@ class LMStudioAgent(ConversationEntity):
     def supported_languages(self) -> list[str]:
         return ["*"]
 
+    async def async_added_to_hass(self) -> None:
+        """Register as a selectable conversation agent when entity is added."""
+        await super().async_added_to_hass()
+        conversation.async_set_agent(self.hass, self._entry, self)
+
+    async def async_will_remove_from_hass(self) -> None:
+        """Unregister when entity is removed."""
+        conversation.async_unset_agent(self.hass, self._entry)
+        await super().async_will_remove_from_hass()
+
     async def async_prepare(self, language: str | None = None) -> None:
         """Pre-load the model when HA knows a request is coming."""
         entry_data = self.hass.data[DOMAIN][self.entry_id]
@@ -68,7 +80,7 @@ class LMStudioAgent(ConversationEntity):
         user_input: ConversationInput,
         chat_log: ChatLog,
     ) -> ConversationResult:
-        """Handle incoming message. This is the current HA 2024.6+ API."""
+        """Handle incoming message — HA 2024.6+ API."""
         entry_data = self.hass.data[DOMAIN][self.entry_id]
 
         cid = user_input.conversation_id or self.entry_id
@@ -118,8 +130,7 @@ class LMStudioAgent(ConversationEntity):
     ) -> str:
         """
         Attempt tool-aware chat first, fall back to plain chat if unsupported.
-        Streaming and tool_calls are mutually exclusive — tools always use
-        non-streaming, then stream the follow-up confirmation.
+        Tool calls are non-streaming; confirmation response can be streamed.
         """
         try:
             result = await self.client.chat(
@@ -132,7 +143,6 @@ class LMStudioAgent(ConversationEntity):
                 _LOGGER.debug("Executing %d tool call(s)", len(tool_calls))
                 await self._tools.execute_tool_calls(tool_calls)
 
-                # Feed result back for natural language confirmation
                 messages.append(choice["message"])
                 messages.append({
                     "role": "tool",
@@ -140,7 +150,6 @@ class LMStudioAgent(ConversationEntity):
                     "content": "Action completed successfully.",
                 })
 
-                # Stream the confirmation if enabled
                 if streaming:
                     content = ""
                     async for token in self.client.chat_stream(model, messages, thinking=thinking):
@@ -150,7 +159,7 @@ class LMStudioAgent(ConversationEntity):
                 followup = await self.client.chat(model, messages, thinking=thinking)
                 return followup["choices"][0]["message"]["content"]
 
-            # Normal response — stream if enabled
+            # Normal response
             if streaming:
                 content = ""
                 async for token in self.client.chat_stream(model, messages, thinking=thinking):
@@ -171,6 +180,3 @@ class LMStudioAgent(ConversationEntity):
 
             result = await self.client.chat(model, messages, thinking=thinking)
             return result["choices"][0]["message"]["content"]
-
-    async def async_will_remove_from_hass(self) -> None:
-        pass
