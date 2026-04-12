@@ -4,8 +4,10 @@ import logging
 
 from homeassistant.components.conversation import (
     ConversationEntity,
+    ConversationEntityFeature,
     ConversationInput,
     ConversationResult,
+    ChatLog,
 )
 from homeassistant.helpers.intent import IntentResponse
 from homeassistant.core import HomeAssistant
@@ -23,6 +25,8 @@ class LMStudioAgent(ConversationEntity):
 
     _attr_has_entity_name = True
     _attr_should_poll = False
+    # This flag is what makes the agent selectable in Voice Assistant settings
+    _attr_supported_features = ConversationEntityFeature.CONTROL
 
     def __init__(
         self,
@@ -44,19 +48,34 @@ class LMStudioAgent(ConversationEntity):
         model = entry.data.get("model", "LM Studio")
         self._attr_name = f"LM Studio ({model})"
         self._attr_unique_id = entry.entry_id
-        self._attr_supported_features = 0
 
     @property
     def supported_languages(self) -> list[str]:
         return ["*"]
 
-    async def async_process(self, user_input: ConversationInput) -> ConversationResult:
+    async def async_prepare(self, language: str | None = None) -> None:
+        """Pre-load the model when HA knows a request is coming."""
+        entry_data = self.hass.data[DOMAIN][self.entry_id]
+        model = entry_data.get("model")
+        if model:
+            try:
+                await self.model_manager.ensure_model(model)
+            except Exception as err:
+                _LOGGER.warning("async_prepare: could not load model %s: %s", model, err)
+
+    async def _async_handle_message(
+        self,
+        user_input: ConversationInput,
+        chat_log: ChatLog,
+    ) -> ConversationResult:
+        """Handle incoming message. This is the current HA 2024.6+ API."""
         entry_data = self.hass.data[DOMAIN][self.entry_id]
 
         cid = user_input.conversation_id or self.entry_id
         text = user_input.text
         system_prompt = entry_data.get("system_prompt", "You are a helpful smart home assistant.")
         streaming_enabled = entry_data.get("streaming", True)
+        thinking_enabled = entry_data.get("thinking", False)
         model = self._router.pick_model(text, entry_data)
 
         entry_data["last_used"] = time.time()
@@ -74,33 +93,7 @@ class LMStudioAgent(ConversationEntity):
 
         content = ""
         try:
-            # First pass — include tools so LLM can request device control
-            result = await self.client.chat(model, messages, tools=HA_TOOLS)
-            choice = result["choices"][0]
-
-            if choice.get("finish_reason") == "tool_calls":
-                tool_calls = choice["message"]["tool_calls"]
-                await self._tools.execute_tool_calls(tool_calls)
-
-                # Give LLM the tool result so it can respond naturally
-                messages.append(choice["message"])
-                messages.append({
-                    "role": "tool",
-                    "tool_call_id": tool_calls[0]["id"],
-                    "content": "Done.",
-                })
-
-                followup = await self.client.chat(model, messages)
-                content = followup["choices"][0]["message"]["content"]
-
-            else:
-                # Normal response — stream if enabled
-                if streaming_enabled:
-                    async for token in self.client.chat_stream(model, messages):
-                        content += token
-                else:
-                    content = choice["message"]["content"]
-
+            content = await self._do_chat(model, messages, streaming_enabled, thinking_enabled)
         except Exception as err:
             _LOGGER.error("LM Studio chat error: %s", err)
             content = "Sorry, I couldn't reach LM Studio right now."
@@ -113,7 +106,71 @@ class LMStudioAgent(ConversationEntity):
         return ConversationResult(
             response=intent_response,
             conversation_id=cid,
+            continue_conversation=False,
         )
+
+    async def _do_chat(
+        self,
+        model: str,
+        messages: list,
+        streaming: bool,
+        thinking: bool,
+    ) -> str:
+        """
+        Attempt tool-aware chat first, fall back to plain chat if unsupported.
+        Streaming and tool_calls are mutually exclusive — tools always use
+        non-streaming, then stream the follow-up confirmation.
+        """
+        try:
+            result = await self.client.chat(
+                model, messages, tools=HA_TOOLS, thinking=thinking
+            )
+            choice = result["choices"][0]
+
+            if choice.get("finish_reason") == "tool_calls":
+                tool_calls = choice["message"].get("tool_calls", [])
+                _LOGGER.debug("Executing %d tool call(s)", len(tool_calls))
+                await self._tools.execute_tool_calls(tool_calls)
+
+                # Feed result back for natural language confirmation
+                messages.append(choice["message"])
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": tool_calls[0]["id"],
+                    "content": "Action completed successfully.",
+                })
+
+                # Stream the confirmation if enabled
+                if streaming:
+                    content = ""
+                    async for token in self.client.chat_stream(model, messages, thinking=thinking):
+                        content += token
+                    return content
+
+                followup = await self.client.chat(model, messages, thinking=thinking)
+                return followup["choices"][0]["message"]["content"]
+
+            # Normal response — stream if enabled
+            if streaming:
+                content = ""
+                async for token in self.client.chat_stream(model, messages, thinking=thinking):
+                    content += token
+                return content
+
+            return choice["message"]["content"]
+
+        except Exception as err:
+            # Model doesn't support tools (e.g. Gemma) — fall back to plain chat
+            _LOGGER.debug("Tool-aware chat failed (%s), falling back to plain chat", err)
+
+            if streaming:
+                content = ""
+                async for token in self.client.chat_stream(model, messages, thinking=thinking):
+                    content += token
+                return content
+
+            result = await self.client.chat(model, messages, thinking=thinking)
+            return result["choices"][0]["message"]["content"]
 
     async def async_will_remove_from_hass(self) -> None:
         pass

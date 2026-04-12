@@ -4,6 +4,7 @@ import logging
 import time
 
 from homeassistant.core import HomeAssistant
+
 from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
@@ -29,7 +30,9 @@ class ToolExecutor:
                     try:
                         args = json.loads(raw_args)
                     except json.JSONDecodeError:
-                        _LOGGER.warning("Could not parse tool args for %s: %r", name, raw_args)
+                        _LOGGER.warning(
+                            "Could not parse tool args for %s: %r", name, raw_args
+                        )
                         continue
                 else:
                     args = raw_args
@@ -39,7 +42,7 @@ class ToolExecutor:
                 try:
                     await self._dispatch(name, args)
                 except Exception as err:
-                    _LOGGER.error("Tool call %s failed: %s", name, err)
+                    _LOGGER.error("Tool call '%s' failed: %s", name, err)
 
         finally:
             state["tool_running"] = False
@@ -64,4 +67,4 @@ class ToolExecutor:
             )
 
         else:
-            _LOGGER.warning("Unknown tool call: %s", name)
+            _LOGGER.warning("Unknown tool call received: %s with args %s", name, args)

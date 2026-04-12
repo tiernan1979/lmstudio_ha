@@ -31,7 +31,7 @@ class LMStudioConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     @staticmethod
     @callback
     def async_get_options_flow(config_entry):
-        return LMStudioOptionsFlow(config_entry)
+        return LMStudioOptionsFlow()
 
     # ─────────────────────────────
     # STEP 1: CONNECTION
@@ -89,9 +89,6 @@ class LMStudioConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             data_schema=schema,
         )
 
-    # ─────────────────────────────
-    # SCHEMAS / HELPERS
-    # ─────────────────────────────
     def _connection_schema(self):
         return vol.Schema({
             vol.Required(CONF_URL, default="http://localhost:1234"): str,
@@ -133,32 +130,30 @@ class LMStudioConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
 # ─────────────────────────────────────────────────────────────
 # OPTIONS FLOW  (edit after initial setup)
+# Note: NO __init__ — config_entry is a read-only property in HA 2024.x
 # ─────────────────────────────────────────────────────────────
 
 class LMStudioOptionsFlow(config_entries.OptionsFlow):
 
-    def __init__(self, config_entry: config_entries.ConfigEntry):
-        self._entry = config_entry
-        self._models = {}
-
     async def async_step_init(self, user_input=None):
-        """Fetch current models then proceed to options form."""
-        url = self._entry.data.get(CONF_URL, "").rstrip("/")
-        self._models = await self._fetch_models(url)
+        """Fetch current models from the server then show the options form."""
+        url = self.config_entry.data.get(CONF_URL, "").rstrip("/")
+        models = await self._fetch_models(url)
 
-        if not self._models:
-            # Server unreachable — keep current model selectable
-            current_model = self._entry.data.get(CONF_MODEL, "")
-            self._models = {current_model: current_model}
+        if not models:
+            # Server unreachable — keep current model selectable so user isn't locked out
+            current_model = self.config_entry.data.get(CONF_MODEL, "")
+            models = {current_model: current_model}
 
+        self._models = models
         return await self.async_step_options()
 
     async def async_step_options(self, user_input=None):
         if user_input is not None:
             return self.async_create_entry(title="", data=user_input)
 
-        # Merge options over data so previously saved options show correctly
-        current = {**self._entry.data, **self._entry.options}
+        # Merge options over data so previously saved options show as defaults
+        current = {**self.config_entry.data, **self.config_entry.options}
 
         schema = vol.Schema({
             vol.Required(CONF_MODEL, default=current.get(CONF_MODEL)): vol.In(self._models),

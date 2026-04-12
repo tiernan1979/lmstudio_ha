@@ -18,7 +18,7 @@ def _get_entry_config(entry: ConfigEntry) -> dict:
 
 
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
-    """Register domain-level services once."""
+    """Register domain-level services once on first load."""
     from .services import async_setup_services
     await async_setup_services(hass)
     return True
@@ -45,9 +45,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "thinking": config.get("thinking", False),
         "idle_timeout": config.get("idle_timeout", 5),
         "last_used": 0,
+        "loaded_model": None,
+        "tool_running": False,
     }
 
-    # Reload entry when user saves new options
+    # Reload when user saves options
     entry.async_on_unload(entry.add_update_listener(async_reload_entry))
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
@@ -66,5 +68,5 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 
 async def async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Triggered when options are saved — full reload to pick up new config."""
+    """Triggered when options are saved."""
     await hass.config_entries.async_reload(entry.entry_id)

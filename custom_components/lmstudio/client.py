@@ -26,15 +26,22 @@ class LMStudioClient:
         model: str,
         messages: list,
         tools: list | None = None,
+        thinking: bool = False,
     ) -> dict:
         payload: dict = {
             "model": model,
             "messages": messages,
             "stream": False,
         }
+
+        # Only add tools if provided
         if tools:
             payload["tools"] = tools
             payload["tool_choice"] = "auto"
+
+        # Explicitly control thinking — pass False to disable, True to enable
+        # LM Studio / llama.cpp uses "thinking" key in the payload
+        payload["thinking"] = thinking
 
         async with aiohttp.ClientSession() as session:
             async with session.post(
@@ -52,12 +59,20 @@ class LMStudioClient:
         self,
         model: str,
         messages: list,
+        thinking: bool = False,
     ) -> AsyncGenerator[str, None]:
-        """Async generator — yields tokens as they arrive."""
+        """Async generator — yields content tokens as they arrive."""
+        payload = {
+            "model": model,
+            "messages": messages,
+            "stream": True,
+            "thinking": thinking,
+        }
+
         async with aiohttp.ClientSession() as session:
             async with session.post(
                 f"{self.url}/v1/chat/completions",
-                json={"model": model, "messages": messages, "stream": True},
+                json=payload,
                 headers=self._headers(),
             ) as resp:
                 resp.raise_for_status()
