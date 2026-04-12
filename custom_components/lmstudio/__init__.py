@@ -1,15 +1,5 @@
-import logging
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
-from homeassistant.components import conversation
-
-from .client import LMStudioClient
+from homeassistant.components import conversation as ha_conversation  # ← alias it
 from .agent import LMStudioAgent
-from .model_manager import ModelManager
-from .const import DOMAIN
-
-_LOGGER = logging.getLogger(__name__)
-
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data.setdefault(DOMAIN, {})
@@ -17,35 +7,36 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     try:
         client = LMStudioClient(entry.data)
         model_manager = ModelManager(hass, client, entry.entry_id)
-        agent = LMStudioAgent(
+        lmstudio_agent = LMStudioAgent(      # ← renamed variable
             hass=hass,
             client=client,
             entry_id=entry.entry_id,
             model_manager=model_manager,
         )
     except Exception as err:
-        _LOGGER.error("Failed to initialise LM Studio integration: %s", err)
+        _LOGGER.error("Failed to initialise LM Studio: %s", err)
         return False
 
     hass.data[DOMAIN][entry.entry_id] = {
         "client": client,
-        "agent": agent,
+        "agent": lmstudio_agent,
         "model_manager": model_manager,
+        "model": entry.data["model"],
+        "system_prompt": entry.data["system_prompt"],
+        "streaming": entry.data.get("streaming", True),
+        "thinking": entry.data.get("thinking", False),
+        "idle_timeout": entry.data.get("idle_timeout", 5),
+        "last_used": 0,
     }
 
-    from .services import async_setup_services
-
-    async def async_setup(hass: HomeAssistant, config: dict) -> bool:
-        """Called once when the integration domain loads."""
-        await async_setup_services(hass)
-        return True
-    
-    agent.async_set_agent(hass, entry, agent)
-    _LOGGER.debug("LM Studio conversation agent registered for entry %s", entry.entry_id)
+    ha_conversation.async_set_agent(hass, entry, lmstudio_agent)  # ← uses alias
     return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    agent.async_unset_agent(hass, entry)
-    hass.data[DOMAIN].pop(entry.entry_id, None)
+    ha_conversation.async_unset_agent(hass, entry)
+    entry_data = hass.data[DOMAIN].pop(entry.entry_id, {})
+    mm = entry_data.get("model_manager")
+    if mm:
+        mm.stop()
     return True
