@@ -4,7 +4,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.components import conversation
 
 from .client import LMStudioClient
-from .conversation import LMStudioAgent
+from .agent import LMStudioAgent
 from .model_manager import ModelManager
 from .const import DOMAIN
 
@@ -40,12 +40,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         await async_setup_services(hass)
         return True
     
-    conversation.async_set_agent(hass, entry, agent)
+    agent.async_set_agent(hass, entry, agent)
     _LOGGER.debug("LM Studio conversation agent registered for entry %s", entry.entry_id)
     return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    conversation.async_unset_agent(hass, entry)
+    agent.async_unset_agent(hass, entry)
     hass.data[DOMAIN].pop(entry.entry_id, None)
     return True
