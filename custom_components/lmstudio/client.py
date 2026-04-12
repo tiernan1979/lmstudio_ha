@@ -1,83 +1,94 @@
+from __future__ import annotations
+import json
+import logging
+from typing import AsyncGenerator
 import aiohttp
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class LMStudioClient:
 
-    def __init__(self, config):
-        self.url = config["url"]
-        self.api_key = config.get("api_key")
+    def __init__(self, config: dict):
+        self.config = config
+        self.url = config["url"].rstrip("/")
+        self.api_key = config.get("api_key", "")
 
-    def headers(self):
-        return (
-            {"Authorization": f"Bearer {self.api_key}"}
-            if self.api_key else {}
-        )
+    def _headers(self) -> dict:
+        return {"Authorization": f"Bearer {self.api_key}"} if self.api_key else {}
 
-    # ─────────────────────────────
-    # NON-STREAM CHAT
-    # ─────────────────────────────
-    async def chat(self, model, messages):
+    async def chat(self, model: str, messages: list, tools: list | None = None) -> dict:
+        payload: dict = {
+            "model": model,
+            "messages": messages,
+            "stream": False,
+        }
+        if tools:
+            payload["tools"] = tools
+            payload["tool_choice"] = "auto"
 
         async with aiohttp.ClientSession() as session:
             async with session.post(
                 f"{self.url}/v1/chat/completions",
-                json={
-                    "model": model,
-                    "messages": messages,
-                    "stream": False,
-                },
-                headers=self.headers(),
+                json=payload,
+                headers=self._headers(),
             ) as resp:
+                resp.raise_for_status()
                 return await resp.json()
 
-    # ─────────────────────────────
-    # STREAM CHAT (NEW)
-    # ─────────────────────────────
-    async def chat_stream(self, model, messages, callback):
-
+    async def chat_stream(self, model: str, messages: list) -> AsyncGenerator[str, None]:
         async with aiohttp.ClientSession() as session:
             async with session.post(
                 f"{self.url}/v1/chat/completions",
-                json={
-                    "model": model,
-                    "messages": messages,
-                    "stream": True,
-                },
-                headers=self.headers(),
+                json={"model": model, "messages": messages, "stream": True},
+                headers=self._headers(),
             ) as resp:
-
-                buffer = ""
-
-                async for line in resp.content:
-
-                    if not line:
+                resp.raise_for_status()
+                async for raw in resp.content:
+                    if not raw:
                         continue
-
                     try:
-                        decoded = line.decode("utf-8").strip()
-
+                        decoded = raw.decode("utf-8").strip()
                         if not decoded.startswith("data:"):
                             continue
-
-                        data = decoded.replace("data:", "").strip()
-
+                        data = decoded[5:].strip()
                         if data == "[DONE]":
                             break
-
-                        import json
                         chunk = json.loads(data)
-
                         delta = (
                             chunk.get("choices", [{}])[0]
                             .get("delta", {})
                             .get("content", "")
                         )
-
                         if delta:
-                            buffer += delta
-                            await callback(delta)
-
+                            yield delta
                     except Exception:
                         continue
 
-                return buffer
+    async def list_models(self) -> dict:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                f"{self.url}/v1/models", headers=self._headers()
+            ) as resp:
+                resp.raise_for_status()
+                return await resp.json()
+
+    async def load_model(self, model: str) -> dict:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                f"{self.url}/api/v1/models/load",
+                json={"model": model},
+                headers=self._headers(),
+            ) as resp:
+                resp.raise_for_status()
+                return await resp.json()
+
+    async def download_model(self, model: str) -> dict:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                f"{self.url}/api/v1/models/download",
+                json={"model": model},
+                headers=self._headers(),
+            ) as resp:
+                resp.raise_for_status()
+                return await resp.json()

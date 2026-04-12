@@ -1,17 +1,16 @@
 class ModelRouter:
-    def pick_model(self, text, state):
 
-        # 🧠 THINKING MODE OVERRIDE
+    def pick_model(self, text: str, state: dict) -> str:
+        # "model" is the canonical key stored in hass.data
+        default = state["model"]
+
         if state.get("thinking"):
-            return state.get("smart_model") or state["selected_model"]
+            return state.get("smart_model", default)
 
-        # fast path
         if len(text) < 40:
-            return state.get("fast_model") or state["selected_model"]
+            return state.get("fast_model", default)
 
-        text_lower = text.lower()
+        if any(w in text.lower() for w in ["why", "how", "explain", "analyze"]):
+            return state.get("smart_model", default)
 
-        if any(w in text_lower for w in ["why", "how", "explain", "analyze"]):
-            return state.get("smart_model") or state["selected_model"]
-
-        return state["selected_model"]
+        return default

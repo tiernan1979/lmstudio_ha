@@ -1,0 +1,30 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to LM Studio",
+        "data": {
+          "url": "LM Studio URL",
+          "api_key": "API Key (optional)"
+        }
+      },
+      "options": {
+        "title": "Configure LM Studio",
+        "data": {
+          "model": "Model",
+          "system_prompt": "System Prompt",
+          "idle_timeout": "Idle Timeout (minutes)",
+          "streaming": "Enable Streaming",
+          "thinking": "Thinking Mode"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Cannot connect to LM Studio. Check the URL and ensure LM Studio is running.",
+      "no_models": "Connected but no models found. Load a model in LM Studio first."
+    },
+    "abort": {
+      "already_configured": "LM Studio is already configured."
+    }
+  }
+}
