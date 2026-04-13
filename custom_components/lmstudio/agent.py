@@ -2,11 +2,9 @@ from __future__ import annotations
 import time
 import logging
 
-from homeassistant.components import conversation
 from homeassistant.components.conversation import (
     ConversationEntity,
     ConversationEntityFeature,
-    AbstractConversationAgent,
     ConversationInput,
     ConversationResult,
     ChatLog,
@@ -23,7 +21,7 @@ from .tool_executor import ToolExecutor
 _LOGGER = logging.getLogger(__name__)
 
 
-class LMStudioAgent(ConversationEntity, AbstractConversationAgent):
+class LMStudioAgent(ConversationEntity):
     """LM Studio conversation agent."""
 
     _attr_has_entity_name = True
@@ -55,15 +53,8 @@ class LMStudioAgent(ConversationEntity, AbstractConversationAgent):
     def supported_languages(self) -> list[str]:
         return ["*"]
 
-    async def async_added_to_hass(self) -> None:
-        """Register as a selectable conversation agent when entity is added."""
-        await super().async_added_to_hass()
-        conversation.async_set_agent(self.hass, self._entry, self)
-
-    async def async_will_remove_from_hass(self) -> None:
-        """Unregister when entity is removed."""
-        conversation.async_unset_agent(self.hass, self._entry)
-        await super().async_will_remove_from_hass()
+    # NO async_added_to_hass / async_set_agent — deprecated in HA 2026.x
+    # The conversation platform registration via async_forward_entry_setups is sufficient
 
     async def async_prepare(self, language: str | None = None) -> None:
         """Pre-load the model when HA knows a request is coming."""
@@ -128,10 +119,6 @@ class LMStudioAgent(ConversationEntity, AbstractConversationAgent):
         streaming: bool,
         thinking: bool,
     ) -> str:
-        """
-        Attempt tool-aware chat first, fall back to plain chat if unsupported.
-        Tool calls are non-streaming; confirmation response can be streamed.
-        """
         try:
             result = await self.client.chat(
                 model, messages, tools=HA_TOOLS, thinking=thinking
@@ -159,7 +146,6 @@ class LMStudioAgent(ConversationEntity, AbstractConversationAgent):
                 followup = await self.client.chat(model, messages, thinking=thinking)
                 return followup["choices"][0]["message"]["content"]
 
-            # Normal response
             if streaming:
                 content = ""
                 async for token in self.client.chat_stream(model, messages, thinking=thinking):
@@ -169,7 +155,6 @@ class LMStudioAgent(ConversationEntity, AbstractConversationAgent):
             return choice["message"]["content"]
 
         except Exception as err:
-            # Model doesn't support tools (e.g. Gemma) — fall back to plain chat
             _LOGGER.debug("Tool-aware chat failed (%s), falling back to plain chat", err)
 
             if streaming:
