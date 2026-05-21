@@ -63,17 +63,19 @@ class LMStudioConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             )
 
         schema = vol.Schema({
-            vol.Required(CONF_MODEL): vol.In(self._models),
-            vol.Optional("smart_model"): vol.In(self._models),
-            vol.Optional("fast_model"): vol.In(self._models),
-            vol.Required(CONF_PROMPT, default=DEFAULT_PROMPT): selector.TextSelector(
-                selector.TextSelectorConfig(multiline=True)
-            ),
-            vol.Optional(CONF_IDLE_TIMEOUT, default=DEFAULT_IDLE_TIMEOUT): vol.All(
-                int, vol.Range(min=1, max=1440)
-            ),
-            vol.Optional("streaming", default=True): bool,
-            vol.Optional("thinking", default=False): bool,
+             vol.Required(CONF_MODEL): vol.In(self._models),
+             vol.Required(
+                 CONF_PROMPT,
+                 default=DEFAULT_PROMPT,
+             ): selector.TextSelector(
+                 selector.TextSelectorConfig(multiline=True)
+             ),
+             vol.Optional(
+                 CONF_IDLE_TIMEOUT,
+                 default=DEFAULT_IDLE_TIMEOUT,
+             ): vol.All(int, vol.Range(min=1, max=1440)),
+             vol.Optional("streaming", default=True): bool,
+             vol.Optional("thinking", default=False): bool,
         })
 
         return self.async_show_form(
@@ -142,27 +144,19 @@ class LMStudioOptionsFlow(config_entries.OptionsFlow):
         current = {**self.config_entry.data, **self.config_entry.options}
 
         schema = vol.Schema({
-            vol.Required(CONF_MODEL, default=current.get(CONF_MODEL)): vol.In(self._models),
-            vol.Optional(
-                "smart_model",
-                default=current.get("smart_model", ""),
-            ): vol.In(self._models),
-            vol.Optional(
-                "fast_model",
-                default=current.get("fast_model", ""),
-            ): vol.In(self._models),
-            vol.Required(
-                CONF_PROMPT,
-                default=current.get(CONF_PROMPT, DEFAULT_PROMPT),
-            ): selector.TextSelector(
-                selector.TextSelectorConfig(multiline=True)
-            ),
-            vol.Optional(
-                CONF_IDLE_TIMEOUT,
-                default=current.get(CONF_IDLE_TIMEOUT, DEFAULT_IDLE_TIMEOUT),
-            ): vol.All(int, vol.Range(min=1, max=1440)),
-            vol.Optional("streaming", default=current.get("streaming", True)): bool,
-            vol.Optional("thinking", default=current.get("thinking", False)): bool,
+             vol.Required(CONF_MODEL, default=current.get(CONF_MODEL)): vol.In(self._models),
+             vol.Required(
+                 CONF_PROMPT,
+                 default=current.get(CONF_PROMPT, DEFAULT_PROMPT),
+             ): selector.TextSelector(
+                 selector.TextSelectorConfig(multiline=True)
+             ),
+             vol.Optional(
+                 CONF_IDLE_TIMEOUT,
+                 default=current.get(CONF_IDLE_TIMEOUT, DEFAULT_IDLE_TIMEOUT),
+             ): vol.All(int, vol.Range(min=1, max=1440)),
+             vol.Optional("streaming", default=current.get("streaming", True)): bool,
+             vol.Optional("thinking", default=current.get("thinking", False)): bool,
         })
 
         return self.async_show_form(

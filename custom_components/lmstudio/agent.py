@@ -26,7 +26,7 @@ class LMStudioAgent(ConversationEntity):
 
     _attr_has_entity_name = True
     _attr_should_poll = False
-    _attr_supported_features = ConversationEntityFeature.CONTROL
+    _attr_supported_features = ConversationEntityFeature.CONTROL | ConversationEntityFeature.CHAT
     _attr_icon = "mdi:robot-confused"
     _attr_available = True
 
