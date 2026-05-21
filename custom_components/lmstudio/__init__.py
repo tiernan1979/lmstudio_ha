@@ -40,6 +40,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "client": client,
         "model_manager": model_manager,
         "model": config["model"],
+        "smart_model": config.get("smart_model", ""),
+        "fast_model": config.get("fast_model", ""),
         "system_prompt": config.get("system_prompt", "You are a helpful smart home assistant."),
         "streaming": config.get("streaming", True),
         "thinking": config.get("thinking", False),
@@ -49,7 +51,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "tool_running": False,
     }
 
-    # Reload when user saves options
     entry.async_on_unload(entry.add_update_listener(async_reload_entry))
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
@@ -64,6 +65,9 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         mm = entry_data.get("model_manager")
         if mm:
             mm.stop()
+        client = entry_data.get("client")
+        if client:
+            await client.close()
     return unload_ok
 
 

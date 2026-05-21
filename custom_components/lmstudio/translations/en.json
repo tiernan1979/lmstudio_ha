@@ -11,8 +11,11 @@
       },
       "options": {
         "title": "Configure LM Studio",
+        "description": "Select models and configure behavior.",
         "data": {
-          "model": "Model",
+          "model": "Default Model",
+          "smart_model": "Smart Model (for complex queries, optional)",
+          "fast_model": "Fast Model (for short queries, optional)",
           "system_prompt": "System Prompt",
           "idle_timeout": "Idle Timeout (minutes)",
           "streaming": "Enable Streaming",
@@ -34,7 +37,9 @@
         "title": "LM Studio Options",
         "description": "Update your LM Studio configuration.",
         "data": {
-          "model": "Model",
+          "model": "Default Model",
+          "smart_model": "Smart Model (for complex queries, optional)",
+          "fast_model": "Fast Model (for short queries, optional)",
           "system_prompt": "System Prompt",
           "idle_timeout": "Idle Timeout (minutes)",
           "streaming": "Enable Streaming",

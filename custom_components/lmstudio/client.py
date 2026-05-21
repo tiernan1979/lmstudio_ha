@@ -14,13 +14,20 @@ class LMStudioClient:
         self.config = config
         self.url = config["url"].rstrip("/")
         self.api_key = config.get("api_key", "")
+        self._session: aiohttp.ClientSession | None = None
+
+    async def _get_session(self) -> aiohttp.ClientSession:
+        if self._session is None or self._session.closed:
+            self._session = aiohttp.ClientSession()
+        return self._session
+
+    async def close(self) -> None:
+        if self._session and not self._session.closed:
+            await self._session.close()
 
     def _headers(self) -> dict:
         return {"Authorization": f"Bearer {self.api_key}"} if self.api_key else {}
 
-    # ─────────────────────────────
-    # NON-STREAMING CHAT
-    # ─────────────────────────────
     async def chat(
         self,
         model: str,
@@ -34,34 +41,28 @@ class LMStudioClient:
             "stream": False,
         }
 
-        # Only add tools if provided
         if tools:
             payload["tools"] = tools
             payload["tool_choice"] = "auto"
 
-        # Explicitly control thinking — pass False to disable, True to enable
-        # LM Studio / llama.cpp uses "thinking" key in the payload
         payload["thinking"] = thinking
 
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                f"{self.url}/v1/chat/completions",
-                json=payload,
-                headers=self._headers(),
-            ) as resp:
-                resp.raise_for_status()
-                return await resp.json()
+        session = await self._get_session()
+        async with session.post(
+            f"{self.url}/v1/chat/completions",
+            json=payload,
+            headers=self._headers(),
+        ) as resp:
+            resp.raise_for_status()
+            return await resp.json()
 
-    # ─────────────────────────────
-    # STREAMING CHAT
-    # ─────────────────────────────
     async def chat_stream(
         self,
         model: str,
         messages: list,
         thinking: bool = False,
     ) -> AsyncGenerator[str, None]:
-        """Async generator — yields content tokens as they arrive."""
+        """Async generator that yields content tokens as they arrive."""
         payload = {
             "model": model,
             "messages": messages,
@@ -69,61 +70,68 @@ class LMStudioClient:
             "thinking": thinking,
         }
 
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                f"{self.url}/v1/chat/completions",
-                json=payload,
-                headers=self._headers(),
-            ) as resp:
-                resp.raise_for_status()
-                async for raw in resp.content:
-                    if not raw:
+        session = await self._get_session()
+        async with session.post(
+            f"{self.url}/v1/chat/completions",
+            json=payload,
+            headers=self._headers(),
+        ) as resp:
+            resp.raise_for_status()
+            async for raw in resp.content:
+                if not raw:
+                    continue
+                try:
+                    decoded = raw.decode("utf-8").strip()
+                    if not decoded.startswith("data:"):
                         continue
-                    try:
-                        decoded = raw.decode("utf-8").strip()
-                        if not decoded.startswith("data:"):
-                            continue
-                        data = decoded[5:].strip()
-                        if data == "[DONE]":
-                            break
-                        chunk = json.loads(data)
-                        delta = (
-                            chunk.get("choices", [{}])[0]
-                            .get("delta", {})
-                            .get("content", "")
-                        )
-                        if delta:
-                            yield delta
-                    except Exception:
-                        continue
+                    data = decoded[5:].strip()
+                    if data == "[DONE]":
+                        break
+                    chunk = json.loads(data)
+                    delta = (
+                        chunk.get("choices", [{}])[0]
+                        .get("delta", {})
+                        .get("content", "")
+                    )
+                    if delta:
+                        yield delta
+                except Exception:
+                    continue
 
-    # ─────────────────────────────
-    # MODEL MANAGEMENT
-    # ─────────────────────────────
     async def list_models(self) -> dict:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(
-                f"{self.url}/v1/models", headers=self._headers()
-            ) as resp:
-                resp.raise_for_status()
-                return await resp.json()
+        session = await self._get_session()
+        async with session.get(
+            f"{self.url}/v1/models", headers=self._headers()
+        ) as resp:
+            resp.raise_for_status()
+            return await resp.json()
 
     async def load_model(self, model: str) -> dict:
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                f"{self.url}/api/v1/models/load",
-                json={"model": model},
-                headers=self._headers(),
-            ) as resp:
-                resp.raise_for_status()
-                return await resp.json()
+        session = await self._get_session()
+        async with session.post(
+            f"{self.url}/api/v1/models/load",
+            json={"model": model},
+            headers=self._headers(),
+        ) as resp:
+            resp.raise_for_status()
+            return await resp.json()
+
+    async def unload_model(self, model: str) -> dict:
+        session = await self._get_session()
+        async with session.post(
+            f"{self.url}/api/v1/models/unload",
+            json={"model": model},
+            headers=self._headers(),
+        ) as resp:
+            resp.raise_for_status()
+            return await resp.json()
 
     async def download_model(self, model: str) -> dict:
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                f"{self.url}/api/v1/models/download",
-                json={"model": model},
-                headers=self._headers(),
-            ) as resp:
-                resp.raise_for_status()
-                return await resp.json()
+        session = await self._get_session()
+        async with session.post(
+            f"{self.url}/api/v1/models/download",
+            json={"model": model},
+            headers=self._headers(),
+        ) as resp:
+            resp.raise_for_status()
+            return await resp.json()

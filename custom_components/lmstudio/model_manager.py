@@ -38,7 +38,6 @@ class ModelManager:
                 await asyncio.sleep(30)
                 state = self.hass.data[DOMAIN].get(self.entry_id)
 
-                # Entry was unloaded
                 if state is None:
                     return
 
@@ -53,9 +52,11 @@ class ModelManager:
                 idle_time = time.time() - state.get("last_used", 0)
 
                 if idle_time > timeout_seconds:
-                    _LOGGER.debug("Model idle timeout — clearing loaded state")
-                    # Don't call load_model("") — just clear local tracking
-                    # If your LM Studio backend has a real unload endpoint, call it here
+                    _LOGGER.debug("Model idle timeout — unloading model: %s", loaded_model)
+                    try:
+                        await self.client.unload_model(loaded_model)
+                    except Exception as err:
+                        _LOGGER.debug("Unload API call failed (%s), clearing local tracking only", err)
                     state["loaded_model"] = None
                     return
 

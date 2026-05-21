@@ -16,10 +16,6 @@ from .const import (
 )
 
 
-# ─────────────────────────────────────────────────────────────
-# MAIN CONFIG FLOW
-# ─────────────────────────────────────────────────────────────
-
 class LMStudioConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     VERSION = 1
@@ -33,9 +29,6 @@ class LMStudioConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     def async_get_options_flow(config_entry):
         return LMStudioOptionsFlow()
 
-    # ─────────────────────────────
-    # STEP 1: CONNECTION
-    # ─────────────────────────────
     async def async_step_user(self, user_input=None):
         errors = {}
 
@@ -61,9 +54,6 @@ class LMStudioConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             errors=errors,
         )
 
-    # ─────────────────────────────
-    # STEP 2: OPTIONS
-    # ─────────────────────────────
     async def async_step_options(self, user_input=None):
         if user_input is not None:
             self._data.update(user_input)
@@ -74,6 +64,8 @@ class LMStudioConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         schema = vol.Schema({
             vol.Required(CONF_MODEL): vol.In(self._models),
+            vol.Optional("smart_model"): vol.In(self._models),
+            vol.Optional("fast_model"): vol.In(self._models),
             vol.Required(CONF_PROMPT, default=DEFAULT_PROMPT): selector.TextSelector(
                 selector.TextSelectorConfig(multiline=True)
             ),
@@ -87,6 +79,7 @@ class LMStudioConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id="options",
             data_schema=schema,
+            description_placeholders={"model_count": str(len(self._models))},
         )
 
     def _connection_schema(self):
@@ -128,11 +121,6 @@ class LMStudioConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             return False
 
 
-# ─────────────────────────────────────────────────────────────
-# OPTIONS FLOW  (edit after initial setup)
-# Note: NO __init__ — config_entry is a read-only property in HA 2024.x
-# ─────────────────────────────────────────────────────────────
-
 class LMStudioOptionsFlow(config_entries.OptionsFlow):
 
     async def async_step_init(self, user_input=None):
@@ -141,7 +129,6 @@ class LMStudioOptionsFlow(config_entries.OptionsFlow):
         models = await self._fetch_models(url)
 
         if not models:
-            # Server unreachable — keep current model selectable so user isn't locked out
             current_model = self.config_entry.data.get(CONF_MODEL, "")
             models = {current_model: current_model}
 
@@ -152,11 +139,18 @@ class LMStudioOptionsFlow(config_entries.OptionsFlow):
         if user_input is not None:
             return self.async_create_entry(title="", data=user_input)
 
-        # Merge options over data so previously saved options show as defaults
         current = {**self.config_entry.data, **self.config_entry.options}
 
         schema = vol.Schema({
             vol.Required(CONF_MODEL, default=current.get(CONF_MODEL)): vol.In(self._models),
+            vol.Optional(
+                "smart_model",
+                default=current.get("smart_model", ""),
+            ): vol.In(self._models),
+            vol.Optional(
+                "fast_model",
+                default=current.get("fast_model", ""),
+            ): vol.In(self._models),
             vol.Required(
                 CONF_PROMPT,
                 default=current.get(CONF_PROMPT, DEFAULT_PROMPT),

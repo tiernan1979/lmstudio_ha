@@ -1,16 +1,17 @@
 class ModelRouter:
 
     def pick_model(self, text: str, state: dict) -> str:
-        # "model" is the canonical key stored in hass.data
         default = state["model"]
+        smart_model = state.get("smart_model") or default
+        fast_model = state.get("fast_model") or default
 
         if state.get("thinking"):
-            return state.get("smart_model", default)
+            return smart_model
 
         if len(text) < 40:
-            return state.get("fast_model", default)
+            return fast_model
 
         if any(w in text.lower() for w in ["why", "how", "explain", "analyze"]):
-            return state.get("smart_model", default)
+            return smart_model
 
         return default

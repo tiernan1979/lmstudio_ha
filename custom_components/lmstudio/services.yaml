@@ -1,0 +1,61 @@
+list_models:
+  name: List Models
+  description: Lists all available models from the connected LM Studio instance. Results are stored in the lmstudio.models state entity.
+  fields:
+
+load_model:
+  name: Load Model
+  description: Loads a specific model into LM Studio. Optionally targets a specific config entry.
+  fields:
+    model:
+      name: Model
+      description: The model identifier to load (e.g., lmstudio-community/Meta-Llama-3-8B-Instruct-GGUF).
+      required: true
+      example: "lmstudio-community/Meta-Llama-3-8B-Instruct-GGUF"
+      selector:
+        text:
+    entry_id:
+      name: Entry ID
+      description: Optional config entry ID to target. If omitted, the first available entry is used.
+      required: false
+      example: "abc123def456"
+      selector:
+        text:
+
+download_model:
+  name: Download Model
+  description: Triggers a model download from Hugging Face into LM Studio.
+  fields:
+    model:
+      name: Model
+      description: The Hugging Face model identifier to download (e.g., lmstudio-community/Meta-Llama-3-8B-Instruct-GGUF).
+      required: true
+      example: "lmstudio-community/Meta-Llama-3-8B-Instruct-GGUF"
+      selector:
+        text:
+    entry_id:
+      name: Entry ID
+      description: Optional config entry ID to target. If omitted, the first available entry is used.
+      required: false
+      example: "abc123def456"
+      selector:
+        text:
+
+clear_memory:
+  name: Clear Memory
+  description: Clears the conversation memory for this LM Studio instance.
+  fields:
+    entry_id:
+      name: Entry ID
+      description: Optional config entry ID to target. If omitted, the first available entry is used.
+      required: false
+      example: "abc123def456"
+      selector:
+        text:
+    conversation_id:
+      name: Conversation ID
+      description: Optional specific conversation to clear. If omitted, all conversations are cleared.
+      required: false
+      example: "home-assistant"
+      selector:
+        text:

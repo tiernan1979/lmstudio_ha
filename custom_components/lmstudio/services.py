@@ -12,6 +12,7 @@ _LOGGER = logging.getLogger(__name__)
 SERVICE_LIST_MODELS = "list_models"
 SERVICE_LOAD_MODEL = "load_model"
 SERVICE_DOWNLOAD_MODEL = "download_model"
+SERVICE_CLEAR_MEMORY = "clear_memory"
 
 LOAD_MODEL_SCHEMA = vol.Schema({
     vol.Required("model"): cv.string,
@@ -23,11 +24,15 @@ DOWNLOAD_MODEL_SCHEMA = vol.Schema({
     vol.Optional("entry_id"): cv.string,
 })
 
+CLEAR_MEMORY_SCHEMA = vol.Schema({
+    vol.Optional("entry_id"): cv.string,
+    vol.Optional("conversation_id"): cv.string,
+})
+
 
 async def async_setup_services(hass: HomeAssistant) -> None:
 
     async def list_models(call: ServiceCall) -> None:
-        # Try all loaded entries, use first available client
         for entry_id, data in hass.data.get(DOMAIN, {}).items():
             client = data.get("client")
             if not client:
@@ -46,7 +51,6 @@ async def async_setup_services(hass: HomeAssistant) -> None:
 
     async def load_model(call: ServiceCall) -> None:
         model = call.data["model"]
-        # Optional: target a specific entry, otherwise use first
         target_entry_id = call.data.get("entry_id")
 
         for entry_id, data in hass.data.get(DOMAIN, {}).items():
@@ -64,7 +68,6 @@ async def async_setup_services(hass: HomeAssistant) -> None:
             except Exception as err:
                 _LOGGER.error("load_model failed for entry %s: %s", entry_id, err)
 
-    # inside async_setup_services:
     async def download_model(call: ServiceCall) -> None:
         model = call.data["model"]
         target_entry_id = call.data.get("entry_id")
@@ -80,10 +83,22 @@ async def async_setup_services(hass: HomeAssistant) -> None:
             except Exception as err:
                 _LOGGER.error("download_model failed for entry %s: %s", entry_id, err)
 
-    hass.services.async_register(
-        DOMAIN, SERVICE_DOWNLOAD_MODEL, download_model,
-        schema=DOWNLOAD_MODEL_SCHEMA,
-    )
+    async def clear_memory(call: ServiceCall) -> None:
+        target_entry_id = call.data.get("entry_id")
+        conversation_id = call.data.get("conversation_id")
+
+        for entry_id, data in hass.data.get(DOMAIN, {}).items():
+            if target_entry_id and entry_id != target_entry_id:
+                continue
+            agent = data.get("agent")
+            if not agent:
+                continue
+            try:
+                await agent._memory.clear(conversation_id)
+                _LOGGER.debug("Cleared memory for entry %s", entry_id)
+                return
+            except Exception as err:
+                _LOGGER.error("clear_memory failed for entry %s: %s", entry_id, err)
 
     hass.services.async_register(
         DOMAIN, SERVICE_LIST_MODELS, list_models
@@ -91,4 +106,12 @@ async def async_setup_services(hass: HomeAssistant) -> None:
     hass.services.async_register(
         DOMAIN, SERVICE_LOAD_MODEL, load_model,
         schema=LOAD_MODEL_SCHEMA,
+    )
+    hass.services.async_register(
+        DOMAIN, SERVICE_DOWNLOAD_MODEL, download_model,
+        schema=DOWNLOAD_MODEL_SCHEMA,
+    )
+    hass.services.async_register(
+        DOMAIN, SERVICE_CLEAR_MEMORY, clear_memory,
+        schema=CLEAR_MEMORY_SCHEMA,
     )

@@ -27,6 +27,7 @@ class LMStudioAgent(ConversationEntity):
     _attr_has_entity_name = True
     _attr_should_poll = False
     _attr_supported_features = ConversationEntityFeature.CONTROL
+    _attr_icon = "mdi:robot-confused"
 
     def __init__(
         self,
@@ -41,9 +42,10 @@ class LMStudioAgent(ConversationEntity):
         self.entry_id = entry_id
         self.model_manager = model_manager
         self._entry = entry
-        self._memory = Memory()
+        self._memory = Memory(hass)
         self._router = ModelRouter()
         self._tools = ToolExecutor(hass, entry_id)
+        self._attr_assumed_state = True
 
         model = entry.data.get("model", "LM Studio")
         self._attr_name = f"LM Studio ({model})"
@@ -52,9 +54,6 @@ class LMStudioAgent(ConversationEntity):
     @property
     def supported_languages(self) -> list[str]:
         return ["*"]
-
-    # NO async_added_to_hass / async_set_agent — deprecated in HA 2026.x
-    # The conversation platform registration via async_forward_entry_setups is sufficient
 
     async def async_prepare(self, language: str | None = None) -> None:
         """Pre-load the model when HA knows a request is coming."""
@@ -71,7 +70,7 @@ class LMStudioAgent(ConversationEntity):
         user_input: ConversationInput,
         chat_log: ChatLog,
     ) -> ConversationResult:
-        """Handle incoming message — HA 2024.6+ API."""
+        """Handle incoming message - HA 2024.6+ API."""
         entry_data = self.hass.data[DOMAIN][self.entry_id]
 
         cid = user_input.conversation_id or self.entry_id
@@ -88,20 +87,20 @@ class LMStudioAgent(ConversationEntity):
         except Exception as err:
             _LOGGER.warning("Could not load model %s: %s", model, err)
 
-        self._memory.add(cid, "user", text)
+        await self._memory.add(cid, "user", text)
         messages = [
             {"role": "system", "content": system_prompt},
-            *self._memory.get(cid),
+            *await self._memory.get(cid),
         ]
 
         content = ""
         try:
-            content = await self._do_chat(model, messages, streaming_enabled, thinking_enabled)
+            content = await self._do_chat(model, messages, streaming_enabled, thinking_enabled, chat_log)
         except Exception as err:
             _LOGGER.error("LM Studio chat error: %s", err)
             content = "Sorry, I couldn't reach LM Studio right now."
 
-        self._memory.add(cid, "assistant", content)
+        await self._memory.add(cid, "assistant", content)
 
         intent_response = IntentResponse(language=user_input.language)
         intent_response.async_set_speech(content)
@@ -118,6 +117,7 @@ class LMStudioAgent(ConversationEntity):
         messages: list,
         streaming: bool,
         thinking: bool,
+        chat_log: ChatLog | None = None,
     ) -> str:
         try:
             result = await self.client.chat(
@@ -128,40 +128,50 @@ class LMStudioAgent(ConversationEntity):
             if choice.get("finish_reason") == "tool_calls":
                 tool_calls = choice["message"].get("tool_calls", [])
                 _LOGGER.debug("Executing %d tool call(s)", len(tool_calls))
-                await self._tools.execute_tool_calls(tool_calls)
+                tool_results = await self._tools.execute_tool_calls(tool_calls)
 
                 messages.append(choice["message"])
-                messages.append({
-                    "role": "tool",
-                    "tool_call_id": tool_calls[0]["id"],
-                    "content": "Action completed successfully.",
-                })
+                for tool_result in tool_results:
+                    messages.append({
+                        "role": "tool",
+                        "tool_call_id": tool_result["tool_call_id"],
+                        "content": tool_result["content"],
+                    })
 
                 if streaming:
-                    content = ""
-                    async for token in self.client.chat_stream(model, messages, thinking=thinking):
-                        content += token
-                    return content
+                    return await self._stream_response(model, messages, thinking, chat_log)
 
                 followup = await self.client.chat(model, messages, thinking=thinking)
-                return followup["choices"][0]["message"]["content"]
+                return followup["choices"][0]["message"].get("content", "")
 
             if streaming:
-                content = ""
-                async for token in self.client.chat_stream(model, messages, thinking=thinking):
-                    content += token
-                return content
+                return await self._stream_response(model, messages, thinking, chat_log)
 
-            return choice["message"]["content"]
+            return choice["message"].get("content", "")
 
         except Exception as err:
             _LOGGER.debug("Tool-aware chat failed (%s), falling back to plain chat", err)
 
             if streaming:
-                content = ""
-                async for token in self.client.chat_stream(model, messages, thinking=thinking):
-                    content += token
-                return content
+                return await self._stream_response(model, messages, thinking, chat_log)
 
             result = await self.client.chat(model, messages, thinking=thinking)
-            return result["choices"][0]["message"]["content"]
+            return result["choices"][0]["message"].get("content", "")
+
+    async def _stream_response(
+        self,
+        model: str,
+        messages: list,
+        thinking: bool,
+        chat_log: ChatLog | None = None,
+    ) -> str:
+        """Stream response tokens and optionally send them progressively to HA."""
+        content = ""
+        async for token in self.client.chat_stream(model, messages, thinking=thinking):
+            content += token
+            if chat_log:
+                try:
+                    await chat_log.async_add_delta(content)
+                except Exception:
+                    pass
+        return content
