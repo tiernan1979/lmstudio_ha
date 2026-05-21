@@ -28,6 +28,7 @@ class LMStudioAgent(ConversationEntity):
     _attr_should_poll = False
     _attr_supported_features = ConversationEntityFeature.CONTROL
     _attr_icon = "mdi:robot-confused"
+    _attr_available = True
 
     def __init__(
         self,
@@ -37,6 +38,7 @@ class LMStudioAgent(ConversationEntity):
         model_manager,
         entry: ConfigEntry,
     ):
+        super().__init__()
         self.hass = hass
         self.client = client
         self.entry_id = entry_id
@@ -45,7 +47,6 @@ class LMStudioAgent(ConversationEntity):
         self._memory = Memory(hass)
         self._router = ModelRouter()
         self._tools = ToolExecutor(hass, entry_id)
-        self._attr_assumed_state = True
 
         model = entry.data.get("model", "LM Studio")
         self._attr_name = f"LM Studio ({model})"
@@ -54,6 +55,11 @@ class LMStudioAgent(ConversationEntity):
     @property
     def supported_languages(self) -> list[str]:
         return ["*"]
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        self._attr_available = True
+        self.async_write_ha_state()
 
     async def async_prepare(self, language: str | None = None) -> None:
         """Pre-load the model when HA knows a request is coming."""
