@@ -9,7 +9,7 @@ from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS = ["conversation"]
+PLATFORMS = ["conversation", "select"]
 
 
 def _get_entry_config(entry: ConfigEntry) -> dict:

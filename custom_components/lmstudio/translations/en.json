@@ -47,5 +47,12 @@
         }
       }
     }
+  },
+  "entity": {
+    "select": {
+      "model": {
+        "name": "Model"
+      }
+    }
   }
 }
