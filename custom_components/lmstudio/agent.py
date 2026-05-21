@@ -26,7 +26,7 @@ class LMStudioAgent(ConversationEntity):
 
     _attr_has_entity_name = True
     _attr_should_poll = False
-    _attr_supported_features = ConversationEntityFeature.CONTROL | ConversationEntityFeature.CHAT
+    _attr_supported_features = ConversationEntityFeature.CONTROL
     _attr_icon = "mdi:robot-confused"
     _attr_available = True
 
@@ -54,29 +54,14 @@ class LMStudioAgent(ConversationEntity):
 
     @property
     def supported_languages(self) -> list[str]:
-        return ["*"]
-
-    async def async_added_to_hass(self) -> None:
-        await super().async_added_to_hass()
-        self._attr_available = True
-        self.async_write_ha_state()
-
-    async def async_prepare(self, language: str | None = None) -> None:
-        """Pre-load the model when HA knows a request is coming."""
-        entry_data = self.hass.data[DOMAIN][self.entry_id]
-        model = entry_data.get("model")
-        if model:
-            try:
-                await self.model_manager.ensure_model(model)
-            except Exception as err:
-                _LOGGER.warning("async_prepare: could not load model %s: %s", model, err)
+        return ["en"]
 
     async def _async_handle_message(
         self,
         user_input: ConversationInput,
         chat_log: ChatLog,
     ) -> ConversationResult:
-        """Handle incoming message - HA 2024.6+ API."""
+        """Handle incoming message."""
         entry_data = self.hass.data[DOMAIN][self.entry_id]
 
         cid = user_input.conversation_id or self.entry_id
@@ -171,7 +156,7 @@ class LMStudioAgent(ConversationEntity):
         thinking: bool,
         chat_log: ChatLog | None = None,
     ) -> str:
-        """Stream response tokens and optionally send them progressively to HA."""
+        """Stream response tokens."""
         content = ""
         async for token in self.client.chat_stream(model, messages, thinking=thinking):
             content += token
