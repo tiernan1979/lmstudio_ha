@@ -69,6 +69,7 @@ class LMStudioAgent(ConversationEntity):
         system_prompt = entry_data.get("system_prompt", "You are a helpful smart home assistant.")
         streaming_enabled = entry_data.get("streaming", True)
         thinking_enabled = entry_data.get("thinking", False)
+        use_tools = entry_data.get("use_tools", True)
         model = self._router.pick_model(text, entry_data)
 
         entry_data["last_used"] = time.time()
@@ -86,7 +87,7 @@ class LMStudioAgent(ConversationEntity):
 
         content = ""
         try:
-            content = await self._do_chat(model, messages, streaming_enabled, thinking_enabled, chat_log)
+            content = await self._do_chat(model, messages, streaming_enabled, thinking_enabled, use_tools, chat_log)
         except Exception as err:
             _LOGGER.error("LM Studio chat error: %s", err)
             content = "Sorry, I couldn't reach LM Studio right now."
@@ -108,11 +109,13 @@ class LMStudioAgent(ConversationEntity):
         messages: list,
         streaming: bool,
         thinking: bool,
+        use_tools: bool,
         chat_log: ChatLog | None = None,
     ) -> str:
+        tools = HA_TOOLS if use_tools else None
         try:
             result = await self.client.chat(
-                model, messages, tools=HA_TOOLS, thinking=thinking
+                model, messages, tools=tools, thinking=thinking
             )
             choice = result["choices"][0]
 

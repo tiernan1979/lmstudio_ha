@@ -11,8 +11,10 @@ from .const import (
     CONF_MODEL,
     CONF_PROMPT,
     CONF_IDLE_TIMEOUT,
+    CONF_USE_TOOLS,
     DEFAULT_IDLE_TIMEOUT,
     DEFAULT_PROMPT,
+    DEFAULT_USE_TOOLS,
 )
 
 
@@ -76,6 +78,7 @@ class LMStudioConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
              ): vol.All(int, vol.Range(min=1, max=1440)),
              vol.Optional("streaming", default=True): bool,
              vol.Optional("thinking", default=False): bool,
+             vol.Optional(CONF_USE_TOOLS, default=DEFAULT_USE_TOOLS): bool,
         })
 
         return self.async_show_form(
@@ -157,6 +160,7 @@ class LMStudioOptionsFlow(config_entries.OptionsFlow):
              ): vol.All(int, vol.Range(min=1, max=1440)),
              vol.Optional("streaming", default=current.get("streaming", True)): bool,
              vol.Optional("thinking", default=current.get("thinking", False)): bool,
+             vol.Optional(CONF_USE_TOOLS, default=current.get(CONF_USE_TOOLS, DEFAULT_USE_TOOLS)): bool,
         })
 
         return self.async_show_form(

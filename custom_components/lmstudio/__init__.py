@@ -45,6 +45,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "system_prompt": config.get("system_prompt", "You are a helpful smart home assistant."),
         "streaming": config.get("streaming", True),
         "thinking": config.get("thinking", False),
+        "use_tools": config.get("use_tools", True),
         "idle_timeout": config.get("idle_timeout", 5),
         "last_used": 0,
         "loaded_model": None,

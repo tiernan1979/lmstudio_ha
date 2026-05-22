@@ -19,7 +19,8 @@
           "system_prompt": "System Prompt",
           "idle_timeout": "Idle Timeout (minutes)",
           "streaming": "Enable Streaming",
-          "thinking": "Thinking Mode"
+          "thinking": "Thinking Mode",
+          "use_tools": "Enable Home Assistant Tools"
         }
       }
     },
@@ -43,7 +44,8 @@
           "system_prompt": "System Prompt",
           "idle_timeout": "Idle Timeout (minutes)",
           "streaming": "Enable Streaming",
-          "thinking": "Thinking Mode"
+          "thinking": "Thinking Mode",
+          "use_tools": "Enable Home Assistant Tools"
         }
       }
     }
