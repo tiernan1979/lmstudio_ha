@@ -4,7 +4,7 @@ DOMAIN = "lmstudio"
 CONF_URL = "url"
 CONF_API_KEY = "api_key"
 CONF_MODEL = "model"
-PLATFORMS = ["conversation", "select"]
+PLATFORMS = ["select"]
 
 HA_TOOLS = [
     {

@@ -1,9 +1,15 @@
+"""LM Studio integration for Home Assistant."""
+
 from __future__ import annotations
 import asyncio
 import logging
 from typing import Any
 
 from homeassistant.components.conversation import (
+    async_set_agent,
+    async_unset_agent,
+)
+from homeassistant.components.conversation.models import (
     AbstractConversationAgent,
 )
 from homeassistant.config_entries import ConfigEntry
@@ -52,11 +58,10 @@ async def async_setup_entry(
 
     agent = _create_agent(hass, client, entry)
     hass.data[DOMAIN][entry.entry_id]["agent"] = agent
-    manager = await hass.components.conversation.async_get_manager(hass)
-    await manager.async_register_agent(agent)
+    async_set_agent(hass, entry.entry_id, agent)
 
     entry.async_on_unload(
-        lambda: asyncio.create_task(manager.async_unregister_agent(agent))
+        lambda: async_unset_agent(hass, entry.entry_id)
     )
 
     return True
