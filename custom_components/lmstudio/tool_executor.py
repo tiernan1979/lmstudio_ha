@@ -3,7 +3,7 @@ import logging
 from typing import Any
 
 from homeassistant.core import HomeAssistant
-from homeassistant.components.conversation import ConversationContext
+
 from .client import LMStudioClient
 
 _LOGGER = logging.getLogger(__name__)
