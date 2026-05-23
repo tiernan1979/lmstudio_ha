@@ -120,7 +120,7 @@ class LMStudioClient:
         session = await self._get_session()
         async with session.post(
             f"{self.url}/api/v1/models/unload",
-            json={"model": model},
+            json={"model": model, "instance_id": model},
             headers=self._headers(),
         ) as resp:
             resp.raise_for_status()
