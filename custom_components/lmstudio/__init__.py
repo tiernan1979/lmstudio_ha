@@ -58,10 +58,10 @@ async def async_setup_entry(
 
     agent = _create_agent(hass, client, entry)
     hass.data[DOMAIN][entry.entry_id]["agent"] = agent
-    async_set_agent(hass, entry.entry_id, agent)
+    async_set_agent(hass, entry, agent)
 
     entry.async_on_unload(
-        lambda: async_unset_agent(hass, entry.entry_id)
+        lambda: async_unset_agent(hass, entry)
     )
 
     return True
