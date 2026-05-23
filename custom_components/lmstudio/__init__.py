@@ -1,17 +1,18 @@
 from __future__ import annotations
+import asyncio
 import logging
 from typing import Any
 
 from homeassistant.components.conversation import (
     AbstractConversationAgent,
 )
-
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.typing import ConfigType
 
 from .client import LMStudioClient
 from .const import CONF_API_KEY, CONF_MODEL, CONF_URL, DOMAIN, PLATFORMS
+from .model_manager import ModelManager
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -38,16 +39,20 @@ async def async_setup_entry(
             entry.data[CONF_URL],
         )
 
+    model_manager = ModelManager(hass, client, entry.entry_id)
+
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = {
         "client": client,
         "data": dict(entry.data),
+        "model_manager": model_manager,
     }
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     agent = _create_agent(hass, client, entry)
-    manager = hass.components.conversation.async_get_manager(hass)
+    hass.data[DOMAIN][entry.entry_id]["agent"] = agent
+    manager = await hass.components.conversation.async_get_manager(hass)
     await manager.async_register_agent(agent)
 
     entry.async_on_unload(
@@ -62,8 +67,11 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
     state = hass.data[DOMAIN].pop(entry.entry_id, None)
-    if state and "client" in state:
-        await state["client"].close()
+    if state:
+        if "model_manager" in state:
+            state["model_manager"].stop()
+        if "client" in state:
+            await state["client"].close()
 
     return unload_ok
 
@@ -71,8 +79,11 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Handle removal of an entry."""
     state = hass.data[DOMAIN].pop(entry.entry_id, None)
-    if state and "client" in state:
-        await state["client"].close()
+    if state:
+        if "model_manager" in state:
+            state["model_manager"].stop()
+        if "client" in state:
+            await state["client"].close()
 
 
 def _create_agent(

@@ -1,5 +1,17 @@
 {
-  "LMStudio_URL_Description": "Enter the URL of your LM Studio server (e.g., http://localhost:1234).",
-  "LMStudio_API_Key_Description": "Enter your LM Studio API key if you have one (optional).",
-  "LMStudio_Error_No_URL": "Please provide a valid URL for the LM Studio server."
+  "config": {
+    "step": {
+      "user": {
+        "title": "LM Studio Server",
+        "description": "Enter the URL of your LM Studio server (e.g., http://localhost:1234).",
+        "data": {
+          "url": "Server URL",
+          "api_key": "API Key (optional)"
+        }
+      }
+    },
+    "error": {
+      "invalid_url": "Please provide a valid URL starting with http:// or https://"
+    }
+  }
 }

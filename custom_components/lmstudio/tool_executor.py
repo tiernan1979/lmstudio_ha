@@ -25,14 +25,14 @@ class ToolExecutor:
             args = call.get("function", {}).get("arguments", {})
 
             if name == "get_state":
-                results.append(await self._get_state(args))
+                results.extend(await self._get_state(args))
             else:
                 _LOGGER.warning("Unknown tool call: %s", name)
                 results.append({"tool_call_id": call["id"], "content": "I don't know how to do that."})
 
         return results
 
-    async def _get_state(self, args: dict[str, Any]) -> dict[str, Any]:
+    async def _get_state(self, args: dict[str, Any]) -> list[dict[str, Any]]:
         """Get the state of requested entities."""
         entity_ids = args.get("entity_id", "")
         if isinstance(entity_ids, str):
@@ -51,4 +51,4 @@ class ToolExecutor:
                 _LOGGER.error("Error getting state for %s: %s", eid, err)
                 results.append({"tool_call_id": "internal", "content": "Error retrieving state."})
 
-        return {"results": results}
+        return results

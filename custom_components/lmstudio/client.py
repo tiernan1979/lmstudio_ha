@@ -89,24 +89,28 @@ class LMStudioClient:
                     "LM Studio returned 404 — is the server running at %s?", self.url
                 )
             resp.raise_for_status()
-            async for line in resp.content:
-                decoded = line.decode("utf-8").strip()
-                if not decoded or not decoded.startswith("data:"):
-                    continue
-                data_str = decoded[5:].strip()
-                if data_str == "[DONE]":
-                    break
-                try:
-                    chunk = json.loads(data_str)
-                    content = (
-                        chunk.get("choices", [{}])[0]
-                        .get("delta", {})
-                        .get("content", "")
-                    )
-                    if content:
-                        yield content
-                except (json.JSONDecodeError, KeyError, IndexError):
-                    continue
+            buffer = ""
+            async for chunk in resp.content:
+                buffer += chunk.decode("utf-8")
+                while "\n" in buffer:
+                    line, buffer = buffer.split("\n", 1)
+                    decoded = line.strip()
+                    if not decoded or not decoded.startswith("data:"):
+                        continue
+                    data_str = decoded[5:].strip()
+                    if data_str == "[DONE]":
+                        return
+                    try:
+                        data = json.loads(data_str)
+                        content = (
+                            data.get("choices", [{}])[0]
+                            .get("delta", {})
+                            .get("content", "")
+                        )
+                        if content:
+                            yield content
+                    except (json.JSONDecodeError, KeyError, IndexError):
+                        continue
 
     async def list_models(self) -> dict:
         """List available models via OpenAI-compatible endpoint."""

@@ -41,7 +41,7 @@ class LMStudioConversationAgent(AbstractConversationAgent):
         self.entry_id = entry_id
         self._entry_data = entry_data
         self._memory = Memory(hass)
-        self._router = ModelRouter()
+        self._router = ModelRouter(entry_data)
         self._tools = ToolExecutor(hass, entry_id)
         self._manager = ModelManager(hass, client, entry_id)
 
@@ -66,10 +66,17 @@ class LMStudioConversationAgent(AbstractConversationAgent):
         )
         thinking_enabled = self._entry_data.get("thinking", False)
         use_tools = self._entry_data.get("use_tools", True)
-        model = self._router.pick_model(string, self._entry_data)
+        model = self._router.pick_model(string)
         if model == "LIST_MODELS":
             models = await self.client.list_models()
-            return f"Available models: {', '.join(models.get('data', []))}"
+            model_ids = [m["id"] for m in models.get("data", []) if "id" in m]
+            speech = f"Available models: {', '.join(model_ids)}"
+            intent_response = intent.IntentResponse(language=context.language)
+            intent_response.async_set_speech(speech)
+            return ConversationResult(
+                response=intent_response,
+                conversation_id=cid,
+            )
 
         await self._manager.ensure_model(model)
 
