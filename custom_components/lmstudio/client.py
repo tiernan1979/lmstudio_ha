@@ -122,7 +122,103 @@ class LMStudioClient:
             return await resp.json()
 
     # ------------------------------------------------------------------
-    # LM Studio native API endpoints (model management)
+    # LM Studio native API endpoints (chat + model management)
+    # ------------------------------------------------------------------
+
+    async def chat_native(
+        self,
+        input: str,
+        model: str | None = None,
+        temperature: float | int | None = None,
+        context_length: int | None = None,
+        integrations: list[dict] | None = None,
+    ) -> dict:
+        """Chat via LM Studio native /api/v1/chat endpoint.
+
+        Supports optional integrations (MCP servers, plugins) that are
+        wired into the model's tool-use loop at inference time.
+        """
+        payload: dict[str, object] = {
+            "input": input,
+        }
+        if model is not None:
+            payload["model"] = model
+        if temperature is not None:
+            payload["temperature"] = float(temperature)
+        if context_length is not None:
+            payload["context_length"] = int(context_length)
+        if integrations:
+            payload["integrations"] = integrations
+
+        session = await self._get_session()
+        async with session.post(
+            f"{self.url}/api/v1/chat",
+            json=payload,
+            headers=self._headers(),
+            timeout=aiohttp.ClientTimeout(total=300),
+        ) as resp:
+            if resp.status == 404:
+                _LOGGER.error(
+                    "LM Studio returned 404 — is the server running at %s?", self.url
+                )
+            resp.raise_for_status()
+            return await resp.json()
+
+    async def chat_native_stream(
+        self,
+        input: str,
+        model: str | None = None,
+        temperature: float | int | None = None,
+        context_length: int | None = None,
+        integrations: list[dict] | None = None,
+    ) -> AsyncGenerator[str, None]:
+        """Stream chat via LM Studio native /api/v1/chat endpoint."""
+        payload: dict[str, object] = {
+            "input": input,
+            "stream": True,
+        }
+        if model is not None:
+            payload["model"] = model
+        if temperature is not None:
+            payload["temperature"] = float(temperature)
+        if context_length is not None:
+            payload["context_length"] = int(context_length)
+        if integrations:
+            payload["integrations"] = integrations
+
+        session = await self._get_session()
+        async with session.post(
+            f"{self.url}/api/v1/chat",
+            json=payload,
+            headers=self._headers(),
+            timeout=aiohttp.ClientTimeout(total=300),
+        ) as resp:
+            if resp.status == 404:
+                _LOGGER.error(
+                    "LM Studio returned 404 — is the server running at %s?", self.url
+                )
+            resp.raise_for_status()
+            buffer = ""
+            async for chunk in resp.content:
+                buffer += chunk.decode("utf-8")
+                while "\n" in buffer:
+                    line, buffer = buffer.split("\n", 1)
+                    decoded = line.strip()
+                    if not decoded or not decoded.startswith("data:"):
+                        continue
+                    data_str = decoded[5:].strip()
+                    if data_str == "[DONE]":
+                        return
+                    try:
+                        data = json.loads(data_str)
+                        content = data.get("content", "") or data.get("message", "")
+                        if content:
+                            yield content
+                    except (json.JSONDecodeError, KeyError):
+                        continue
+
+    # ------------------------------------------------------------------
+    # LM Studio native API endpoints (model management only)
     # ------------------------------------------------------------------
 
     async def load_model(self, model_id: str) -> dict:

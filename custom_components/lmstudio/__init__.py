@@ -19,12 +19,15 @@ from homeassistant.helpers.typing import ConfigType
 from .client import LMStudioClient
 from .const import CONF_API_KEY, CONF_MODEL, CONF_URL, DOMAIN, PLATFORMS
 from .model_manager import ModelManager
+from .services import async_setup_services
 
 _LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     """Set up the LM Studio integration from yaml (not required)."""
+    hass.data.setdefault(DOMAIN, {})
+    await async_setup_services(hass)
     return True
 
 
