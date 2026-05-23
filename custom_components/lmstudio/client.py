@@ -4,6 +4,7 @@ import logging
 from typing import AsyncGenerator
 
 import aiohttp
+from aiohttp import FormData
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -305,6 +306,137 @@ class LMStudioClient:
                 return {"status": "not_supported"}
             resp.raise_for_status()
             return await resp.json()
+
+    # ------------------------------------------------------------------
+    # OpenAI-compatible audio endpoints (TTS + STT)
+    # ------------------------------------------------------------------
+
+    async def speech_synthesize(
+        self,
+        model: str,
+        input_text: str,
+        voice: str = "alloy",
+        response_format: str = "mp3",
+        speed: float = 1.0,
+    ) -> bytes:
+        """Synthesize speech from text via OpenAI-compatible /v1/audio/speech."""
+        payload: dict[str, object] = {
+            "model": model,
+            "input": input_text,
+            "voice": voice,
+            "response_format": response_format,
+            "speed": speed,
+        }
+        session = await self._get_session()
+        async with session.post(
+            f"{self.url}/v1/audio/speech",
+            json=payload,
+            headers=self._headers(),
+            timeout=aiohttp.ClientTimeout(total=60),
+        ) as resp:
+            if resp.status == 404:
+                _LOGGER.warning(
+                    "TTS endpoint /v1/audio/speech not available on this LM Studio version"
+                )
+                return b""
+            resp.raise_for_status()
+            return await resp.read()
+
+    async def audio_transcribe(
+        self,
+        file_bytes: bytes,
+        filename: str = "audio.wav",
+        model: str = "whisper-large-v3-turbo",
+        language: str | None = None,
+        temperature: float | int | None = None,
+    ) -> dict:
+        """Transcribe audio to text via OpenAI-compatible /v1/audio/transcriptions."""
+        session = await self._get_session()
+        form = FormData()
+        form.add_field("file", file_bytes, filename=filename)
+        form.add_field("model", model)
+        if language is not None:
+            form.add_field("language", language)
+        if temperature is not None:
+            form.add_field("temperature", str(temperature))
+        async with session.post(
+            f"{self.url}/v1/audio/transcriptions",
+            data=form,
+            headers={"Authorization": f"Bearer {self.api_key}"} if self.api_key else {},
+            timeout=aiohttp.ClientTimeout(total=60),
+        ) as resp:
+            if resp.status == 404:
+                _LOGGER.warning(
+                    "STT endpoint /v1/audio/transcriptions not available on this LM Studio version"
+                )
+                return {"text": ""}
+            resp.raise_for_status()
+            return await resp.json()
+
+    # ------------------------------------------------------------------
+    # Native streaming chat with real-time events
+    # ------------------------------------------------------------------
+
+    async def chat_native_streaming_events(
+        self,
+        input: str,
+        model: str | None = None,
+        temperature: float | int | None = None,
+        context_length: int | None = None,
+        integrations: list[dict] | None = None,
+    ) -> AsyncGenerator[dict[str, object], None]:
+        """Stream chat via /api/v1/chat/streaming with structured events.
+
+        Yields dicts like {"event": "start"}, {"event": "content", "data": "..."}, etc.
+        """
+        payload: dict[str, object] = {
+            "input": input,
+        }
+        if model is not None:
+            payload["model"] = model
+        if temperature is not None:
+            payload["temperature"] = float(temperature)
+        if context_length is not None:
+            payload["context_length"] = int(context_length)
+        if integrations:
+            payload["integrations"] = integrations
+
+        session = await self._get_session()
+        async with session.post(
+            f"{self.url}/api/v1/chat/streaming",
+            json=payload,
+            headers=self._headers(),
+            timeout=aiohttp.ClientTimeout(total=300),
+        ) as resp:
+            if resp.status == 404:
+                _LOGGER.warning(
+                    "Streaming endpoint /api/v1/chat/streaming not available on this LM Studio version"
+                )
+                yield {"event": "error", "data": "Streaming endpoint not available"}
+                return
+            resp.raise_for_status()
+            buffer = ""
+            async for chunk in resp.content:
+                buffer += chunk.decode("utf-8")
+                while "\n\n" in buffer:
+                    line, buffer = buffer.split("\n\n", 1)
+                    event = None
+                    data = None
+                    for header in line.split("\n"):
+                        if ":" not in header:
+                            continue
+                        key, val = header.split(":", 1)
+                        if key.strip() == "event":
+                            event = val.strip()
+                        elif key.strip() == "data":
+                            data = val.strip()
+                    if event is None or data is None:
+                        continue
+                    try:
+                        parsed_data = json.loads(data)
+                        yield {"event": event, "data": parsed_data}
+                    except json.JSONDecodeError:
+                        yield {"event": event, "data": data}
 
     async def is_available(self) -> bool:
         """Check if LM Studio server is reachable."""

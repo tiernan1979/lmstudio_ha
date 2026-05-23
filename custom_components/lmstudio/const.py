@@ -16,6 +16,14 @@ DEFAULT_THINKING = False
 
 PLATFORMS = ["select"]
 
+SERVICE_LIST_MODELS = "list_models"
+SERVICE_LOAD_MODEL = "load_model"
+SERVICE_UNLOAD_MODEL = "unload_model"
+SERVICE_DOWNLOAD_MODEL = "download_model"
+SERVICE_CLEAR_MEMORY = "clear_memory"
+SERVICE_CHAT = "chat"
+SERVICE_STREAMING_CHAT = "streaming_chat"
+
 HA_TOOLS = [
     {
         "type": "function",

@@ -1,20 +1,24 @@
 from __future__ import annotations
+import asyncio
 import logging
+import uuid
 
 import voluptuous as vol
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers import config_validation as cv
 
-from .const import DOMAIN
+from .const import (
+    DOMAIN,
+    SERVICE_LIST_MODELS,
+    SERVICE_LOAD_MODEL,
+    SERVICE_UNLOAD_MODEL,
+    SERVICE_DOWNLOAD_MODEL,
+    SERVICE_CLEAR_MEMORY,
+    SERVICE_CHAT,
+    SERVICE_STREAMING_CHAT,
+)
 
 _LOGGER = logging.getLogger(__name__)
-
-SERVICE_LIST_MODELS = "list_models"
-SERVICE_LOAD_MODEL = "load_model"
-SERVICE_UNLOAD_MODEL = "unload_model"
-SERVICE_DOWNLOAD_MODEL = "download_model"
-SERVICE_CLEAR_MEMORY = "clear_memory"
-SERVICE_CHAT = "chat"
 
 MODEL_SCHEMA = vol.Schema({
     vol.Required("model"): cv.string,
@@ -39,6 +43,14 @@ CHAT_SCHEMA = vol.Schema({
         vol.Optional("id"): cv.string,
         vol.Optional("allowed_tools"): [cv.string],
     })],
+})
+
+STREAMING_CHAT_SCHEMA = vol.Schema({
+    vol.Required("message"): cv.string,
+    vol.Optional("model"): cv.string,
+    vol.Optional("entry_id"): cv.string,
+    vol.Optional("temperature"): vol.Any(vol.Range(0, 2), int),
+    vol.Optional("context_length"): vol.All(cv.positive_int, vol.Range(256, 131072)),
 })
 
 
@@ -165,26 +177,108 @@ async def async_setup_services(hass: HomeAssistant) -> None:
             except Exception as err:
                 _LOGGER.error("clear_memory failed for entry %s: %s", entry_id, err)
 
+    # ------------------------------------------------------------------
+    # Native streaming chat with real-time events
+    # ------------------------------------------------------------------
+
+    async def streaming_chat(call: ServiceCall) -> None:
+        message = call.data["message"]
+        target_entry_id = call.data.get("entry_id")
+        model = call.data.get("model")
+        temperature = call.data.get("temperature")
+        context_length = call.data.get("context_length")
+
+        for entry_id, data in hass.data.get(DOMAIN, {}).items():
+            if target_entry_id and entry_id != target_entry_id:
+                continue
+            client = data.get("client")
+            if not client:
+                continue
+            try:
+                session_uuid = str(uuid.uuid4())[:8]
+                full_content = ""
+                event_count = 0
+
+                async for item in client.chat_native_streaming_events(
+                    input=message,
+                    model=model,
+                    temperature=temperature,
+                    context_length=context_length,
+                ):
+                    event_type = item.get("event", "unknown")
+                    payload = item.get("data", "")
+                    event_count += 1
+
+                    if event_type == "content":
+                        delta = (
+                            payload.get("content", "")
+                            if isinstance(payload, dict)
+                            else str(payload)
+                        )
+                        full_content += delta
+                        hass.states.async_set(
+                            f"{DOMAIN}.streaming_response",
+                            full_content[:255],
+                            {
+                                "full_content": full_content,
+                                "event_type": event_type,
+                                "session_id": session_uuid,
+                                "entry_id": entry_id,
+                            },
+                        )
+                    elif event_type == "error":
+                        error_msg = (
+                            payload.get("message", "")
+                            if isinstance(payload, dict)
+                            else str(payload)
+                        )
+                        hass.states.async_set(
+                            f"{DOMAIN}.streaming_response",
+                            full_content[:255],
+                            {
+                                "full_content": full_content,
+                                "event_type": event_type,
+                                "error": error_msg,
+                                "session_id": session_uuid,
+                                "entry_id": entry_id,
+                            },
+                        )
+                    else:
+                        hass.states.async_set(
+                            f"{DOMAIN}.streaming_response",
+                            full_content[:255],
+                            {
+                                "full_content": full_content,
+                                "event_type": event_type,
+                                "session_id": session_uuid,
+                                "entry_id": entry_id,
+                            },
+                        )
+
+                return
+            except Exception as err:
+                _LOGGER.error(
+                    "streaming_chat failed for entry %s: %s", entry_id, err
+                )
+
     hass.services.async_register(
-        DOMAIN, SERVICE_LIST_MODELS, list_models
+        DOMAIN, SERVICE_LIST_MODELS, list_models, vol.Schema({})
     )
     hass.services.async_register(
-        DOMAIN, SERVICE_LOAD_MODEL, load_model,
-        schema=MODEL_SCHEMA,
+        DOMAIN, SERVICE_LOAD_MODEL, load_model, MODEL_SCHEMA
     )
     hass.services.async_register(
-        DOMAIN, SERVICE_UNLOAD_MODEL, unload_model,
-        schema=MODEL_SCHEMA,
+        DOMAIN, SERVICE_UNLOAD_MODEL, unload_model, MODEL_SCHEMA
     )
     hass.services.async_register(
-        DOMAIN, SERVICE_DOWNLOAD_MODEL, download_model,
-        schema=MODEL_SCHEMA,
+        DOMAIN, SERVICE_DOWNLOAD_MODEL, download_model, MODEL_SCHEMA
     )
     hass.services.async_register(
-        DOMAIN, SERVICE_CLEAR_MEMORY, clear_memory,
-        schema=CLEAR_MEMORY_SCHEMA,
+        DOMAIN, SERVICE_CLEAR_MEMORY, clear_memory, CLEAR_MEMORY_SCHEMA
     )
     hass.services.async_register(
-        DOMAIN, SERVICE_CHAT, chat,
-        schema=CHAT_SCHEMA,
+        DOMAIN, SERVICE_CHAT, chat, CHAT_SCHEMA
+    )
+    hass.services.async_register(
+        DOMAIN, SERVICE_STREAMING_CHAT, streaming_chat, STREAMING_CHAT_SCHEMA
     )
