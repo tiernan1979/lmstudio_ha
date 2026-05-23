@@ -4,8 +4,8 @@ from typing import Any
 
 from homeassistant.components.conversation import (
     AbstractConversationAgent,
-    async_get_manager,
 )
+
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.typing import ConfigType
@@ -47,7 +47,7 @@ async def async_setup_entry(
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     agent = _create_agent(hass, client, entry)
-    manager = async_get_manager(hass)
+    manager = hass.components.conversation.async_get_manager(hass)
     await manager.async_register_agent(agent)
 
     entry.async_on_unload(

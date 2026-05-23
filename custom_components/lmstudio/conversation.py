@@ -2,7 +2,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from homeassistant.components.conversation import async_get_manager
+from homeassistant.components.conversation import
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
@@ -19,7 +19,6 @@ async def async_setup_entry(
     """Set up the conversation platform."""
     state = hass.data[DOMAIN][entry.entry_id]
     client: LMStudioClient = state["client"]
-
     agent = LMStudioConversationAgent(
         hass=hass,
         client=client,
@@ -27,7 +26,7 @@ async def async_setup_entry(
         entry_data=state["data"],
     )
 
-    manager = async_get_manager(hass)
+    manager = hass.components.conversation.async_get_manager(hass)
     await manager.async_register_agent(agent)
     entry.async_on_unload(
         lambda: asyncio.create_task(manager.async_unregister_agent(agent))
@@ -42,14 +41,6 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if not state:
         return False
 
-    client: LMStudioClient = state["client"]
-    agent = LMStudioConversationAgent(
-        hass=hass,
-        client=client,
-        entry_id=entry.entry_id,
-        entry_data=state["data"],
-    )
-
-    manager = async_get_manager(hass)
+    manager = hass.components.conversation.async_get_manager(hass)
     await manager.async_unregister_agent(agent)
     return True
