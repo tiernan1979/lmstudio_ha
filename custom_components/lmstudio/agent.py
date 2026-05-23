@@ -13,7 +13,15 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers import intent
 
 from .client import LMStudioClient
-from .const import HA_TOOLS
+from .const import (
+    CONF_PROMPT,
+    CONF_THINKING,
+    CONF_USE_TOOLS,
+    DEFAULT_PROMPT,
+    DEFAULT_THINKING,
+    DEFAULT_USE_TOOLS,
+    HA_TOOLS,
+)
 from .model_manager import ModelManager
 from .memory import Memory
 from .model_router import ModelRouter, LIST_MODELS
@@ -54,10 +62,9 @@ class LMStudioConversationAgent(AbstractConversationAgent):
         cid = user_input.conversation_id or self.entry_id
         text = user_input.text
         language = user_input.language
-        system_prompt = self._entry_data.get(
-            "system_prompt", "You are a helpful smart home assistant."
-        )
-        use_tools = self._entry_data.get("use_tools", True)
+        system_prompt = self._entry_data.get(CONF_PROMPT, DEFAULT_PROMPT)
+        use_tools = self._entry_data.get(CONF_USE_TOOLS, DEFAULT_USE_TOOLS)
+        thinking = self._entry_data.get(CONF_THINKING, DEFAULT_THINKING)
         model = self._router.pick_model(text)
 
         if model == LIST_MODELS:

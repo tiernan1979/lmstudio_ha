@@ -48,7 +48,7 @@ class ModelManager:
                 if not loaded_model:
                     continue
 
-                timeout_seconds = state.get("idle_timeout", 5) * 60
+                timeout_seconds = state.get(CONF_IDLE_TIMEOUT, DEFAULT_IDLE_TIMEOUT) * 60
                 idle_time = time.time() - state.get("last_used", 0)
 
                 if idle_time > timeout_seconds:

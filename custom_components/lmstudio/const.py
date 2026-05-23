@@ -4,6 +4,16 @@ DOMAIN = "lmstudio"
 CONF_URL = "url"
 CONF_API_KEY = "api_key"
 CONF_MODEL = "model"
+CONF_PROMPT = "system_prompt"
+CONF_IDLE_TIMEOUT = "idle_timeout"
+CONF_USE_TOOLS = "use_tools"
+CONF_THINKING = "thinking"
+
+DEFAULT_PROMPT = "You are a helpful smart home assistant."
+DEFAULT_IDLE_TIMEOUT = 300
+DEFAULT_USE_TOOLS = True
+DEFAULT_THINKING = False
+
 PLATFORMS = ["select"]
 
 HA_TOOLS = [
