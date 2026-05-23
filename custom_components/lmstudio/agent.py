@@ -1,19 +1,19 @@
 from __future__ import annotations
-import time
 import logging
+from typing import Any, AsyncGenerator
 
 from homeassistant.components.conversation import (
-    ConversationEntity,
-    ConversationEntityFeature,
-    ConversationInput,
+    AbstractConversationAgent,
+    AgentFormatResponseChunk,
+    ConversationContext,
     ConversationResult,
-    ChatLog,
 )
-from homeassistant.helpers.intent import IntentResponse
 from homeassistant.core import HomeAssistant
-from homeassistant.config_entries import ConfigEntry
+from homeassistant.helpers import intent
 
+from .client import LMStudioClient
 from .const import DOMAIN, HA_TOOLS
+from .model_manager import ModelManager
 from .memory import Memory
 from .model_router import ModelRouter
 from .tool_executor import ToolExecutor
@@ -21,102 +21,171 @@ from .tool_executor import ToolExecutor
 _LOGGER = logging.getLogger(__name__)
 
 
-class LMStudioAgent(ConversationEntity):
-    """LM Studio conversation agent."""
+class LMStudioConversationAgent(AbstractConversationAgent):
+    """LM Studio conversation agent for Home Assistant voice assistant."""
 
-    _attr_has_entity_name = True
-    _attr_should_poll = False
-    _attr_supported_features = ConversationEntityFeature.CONTROL
-    _attr_icon = "mdi:robot-confused"
-    _attr_available = True
+    @property
+    def supported_languages(self) -> list[str] | None:
+        return ["en"]
 
     def __init__(
         self,
         hass: HomeAssistant,
-        client,
+        client: LMStudioClient,
         entry_id: str,
-        model_manager,
-        entry: ConfigEntry,
-    ):
+        entry_data: dict[str, Any],
+    ) -> None:
         super().__init__()
         self.hass = hass
         self.client = client
         self.entry_id = entry_id
-        self.model_manager = model_manager
-        self._entry = entry
+        self._entry_data = entry_data
         self._memory = Memory(hass)
         self._router = ModelRouter()
         self._tools = ToolExecutor(hass, entry_id)
-
-        model = entry.data.get("model", "LM Studio")
-        self._attr_name = f"LM Studio ({model})"
-        self._attr_unique_id = entry.entry_id
+        self._manager = ModelManager(hass, client, entry_id)
 
     @property
-    def supported_languages(self) -> list[str]:
-        return ["en"]
+    def agent_id(self) -> str:
+        return f"lmstudio-{self.entry_id}"
 
-    async def _async_handle_message(
+    async def async_get_summary(self) -> str | None:
+        model = self._entry_data.get("model", "LM Studio")
+        return f"LM Studio ({model})"
+
+    async def async_process(
         self,
-        user_input: ConversationInput,
-        chat_log: ChatLog,
-    ) -> ConversationResult:
-        """Handle incoming message."""
-        entry_data = self.hass.data[DOMAIN][self.entry_id]
+        string: str,
+        context: ConversationContext,
+        stream: bool = False,
+    ) -> ConversationResult | AsyncGenerator[AgentFormatResponseChunk, None]:
+        """Process a conversation turn."""
+        cid = context.conversation_id or self.entry_id
+        system_prompt = self._entry_data.get(
+            "system_prompt", "You are a helpful smart home assistant."
+        )
+        thinking_enabled = self._entry_data.get("thinking", False)
+        use_tools = self._entry_data.get("use_tools", True)
+        model = self._router.pick_model(string, self._entry_data)
+        if model == "LIST_MODELS":
+            models = await self.client.list_models()
+            return f"Available models: {', '.join(models.get('data', []))}"
 
-        cid = user_input.conversation_id or self.entry_id
-        text = user_input.text
-        system_prompt = entry_data.get("system_prompt", "You are a helpful smart home assistant.")
-        streaming_enabled = entry_data.get("streaming", True)
-        thinking_enabled = entry_data.get("thinking", False)
-        use_tools = entry_data.get("use_tools", True)
-        model = self._router.pick_model(text, entry_data)
+        await self._manager.ensure_model(model)
 
-        entry_data["last_used"] = time.time()
-
-        try:
-            await self.model_manager.ensure_model(model)
-        except Exception as err:
-            _LOGGER.warning("Could not load model %s: %s", model, err)
-
-        await self._memory.add(cid, "user", text)
-        messages = [
+        messages: list[dict[str, str]] = [
             {"role": "system", "content": system_prompt},
             *await self._memory.get(cid),
         ]
 
+        if stream:
+            return await self._stream_process(
+                string, cid, model, messages, thinking_enabled, use_tools, context
+            )
+
         content = ""
         try:
-            content = await self._do_chat(model, messages, streaming_enabled, thinking_enabled, use_tools, chat_log)
+            content = await self._do_chat(
+                model, messages, thinking_enabled, use_tools
+            )
         except Exception as err:
             _LOGGER.error("LM Studio chat error: %s", err)
             content = "Sorry, I couldn't reach LM Studio right now."
 
+        if not content:
+            content = "I didn't receive a response."
+
+        await self._memory.add(cid, "user", string)
         await self._memory.add(cid, "assistant", content)
 
-        intent_response = IntentResponse(language=user_input.language)
+        intent_response = intent.IntentResponse(language=context.language)
         intent_response.async_set_speech(content)
 
         return ConversationResult(
             response=intent_response,
             conversation_id=cid,
-            continue_conversation=False,
         )
+
+    async def _stream_process(
+        self,
+        string: str,
+        cid: str,
+        model: str,
+        messages: list[dict[str, str]],
+        thinking_enabled: bool,
+        use_tools: bool,
+        context: ConversationContext,
+    ) -> AsyncGenerator[AgentFormatResponseChunk, None]:
+        """Stream tokens back to Home Assistant."""
+        await self._memory.add(cid, "user", string)
+
+        content_parts: list[str] = []
+        try:
+            tools = HA_TOOLS if use_tools else None
+
+            # First check if the model wants to call tools (non-streaming check)
+            if use_tools:
+                try:
+                    result = await self.client.chat(model, messages, tools=tools)
+                    choice = result["choices"][0]
+
+                    if choice.get("finish_reason") == "tool_calls":
+                        tool_calls = choice["message"].get("tool_calls", [])
+                        _LOGGER.debug("Executing %d tool call(s)", len(tool_calls))
+                        tool_results = await self._tools.execute_tool_calls(tool_calls)
+
+                        messages.append(choice["message"])
+                        for tool_result in tool_results:
+                            messages.append({
+                                "role": "tool",
+                                "tool_call_id": tool_result["tool_call_id"],
+                                "content": str(tool_result["content"]),
+                            })
+
+                    else:
+                        text = choice["message"].get("content", "")
+                        content_parts.append(text)
+                        yield AgentFormatResponseChunk(
+                            agent_id=self.agent_id,
+                            response_chunk=text,
+                        )
+                        await self._memory.add(cid, "assistant", "".join(content_parts))
+                        return
+                except Exception as err:
+                    _LOGGER.debug("Tool check failed (%s), streaming plain chat", err)
+
+            # Stream the final response
+            async for token in self.client.chat_stream(model, messages):
+                content_parts.append(token)
+                yield AgentFormatResponseChunk(
+                    agent_id=self.agent_id,
+                    response_chunk=token,
+                )
+
+        except Exception as err:
+            _LOGGER.error("Streaming error: %s", err)
+            error_msg = "Sorry, streaming failed."
+            yield AgentFormatResponseChunk(
+                agent_id=self.agent_id,
+                response_chunk=error_msg,
+            )
+            content_parts.append(error_msg)
+
+        full_text = "".join(content_parts)
+        await self._memory.add(cid, "assistant", full_text)
 
     async def _do_chat(
         self,
         model: str,
-        messages: list,
-        streaming: bool,
-        thinking: bool,
+        messages: list[dict[str, str]],
+        thinking_enabled: bool,
         use_tools: bool,
-        chat_log: ChatLog | None = None,
     ) -> str:
+        """Non-streaming chat with tool support."""
         tools = HA_TOOLS if use_tools else None
+
         try:
-            result = await self.client.chat(
-                model, messages, tools=tools, thinking=thinking
-            )
+            result = await self.client.chat(model, messages, tools=tools)
             choice = result["choices"][0]
 
             if choice.get("finish_reason") == "tool_calls":
@@ -129,43 +198,15 @@ class LMStudioAgent(ConversationEntity):
                     messages.append({
                         "role": "tool",
                         "tool_call_id": tool_result["tool_call_id"],
-                        "content": tool_result["content"],
+                        "content": str(tool_result["content"]),
                     })
 
-                if streaming:
-                    return await self._stream_response(model, messages, thinking, chat_log)
-
-                followup = await self.client.chat(model, messages, thinking=thinking)
+                followup = await self.client.chat(model, messages)
                 return followup["choices"][0]["message"].get("content", "")
-
-            if streaming:
-                return await self._stream_response(model, messages, thinking, chat_log)
 
             return choice["message"].get("content", "")
 
         except Exception as err:
             _LOGGER.debug("Tool-aware chat failed (%s), falling back to plain chat", err)
-
-            if streaming:
-                return await self._stream_response(model, messages, thinking, chat_log)
-
-            result = await self.client.chat(model, messages, thinking=thinking)
+            result = await self.client.chat(model, messages)
             return result["choices"][0]["message"].get("content", "")
-
-    async def _stream_response(
-        self,
-        model: str,
-        messages: list,
-        thinking: bool,
-        chat_log: ChatLog | None = None,
-    ) -> str:
-        """Stream response tokens."""
-        content = ""
-        async for token in self.client.chat_stream(model, messages, thinking=thinking):
-            content += token
-            if chat_log:
-                try:
-                    await chat_log.async_add_delta(content)
-                except Exception:
-                    pass
-        return content

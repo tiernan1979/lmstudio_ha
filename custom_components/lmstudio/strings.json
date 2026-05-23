@@ -1,0 +1,5 @@
+{
+  "LMStudio_URL_Description": "Enter the URL of your LM Studio server (e.g., http://localhost:1234).",
+  "LMStudio_API_Key_Description": "Enter your LM Studio API key if you have one (optional).",
+  "LMStudio_Error_No_URL": "Please provide a valid URL for the LM Studio server."
+}

@@ -25,17 +25,24 @@ class LMStudioClient:
         if self._session and not self._session.closed:
             await self._session.close()
 
-    def _headers(self) -> dict:
-        return {"Authorization": f"Bearer {self.api_key}"} if self.api_key else {}
+    def _headers(self) -> dict[str, str]:
+        headers: dict[str, str] = {"Content-Type": "application/json"}
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
+        return headers
+
+    # ------------------------------------------------------------------
+    # OpenAI-compatible endpoints (chat completions)
+    # ------------------------------------------------------------------
 
     async def chat(
         self,
         model: str,
-        messages: list,
-        tools: list | None = None,
-        thinking: bool = False,
+        messages: list[dict],
+        tools: list[dict] | None = None,
     ) -> dict:
-        payload: dict = {
+        """Non-streaming chat completion."""
+        payload: dict[str, object] = {
             "model": model,
             "messages": messages,
             "stream": False,
@@ -45,29 +52,29 @@ class LMStudioClient:
             payload["tools"] = tools
             payload["tool_choice"] = "auto"
 
-        payload["thinking"] = thinking
-
         session = await self._get_session()
         async with session.post(
             f"{self.url}/v1/chat/completions",
             json=payload,
             headers=self._headers(),
         ) as resp:
+            if resp.status == 404:
+                _LOGGER.error(
+                    "LM Studio returned 404 — is the server running at %s?", self.url
+                )
             resp.raise_for_status()
             return await resp.json()
 
     async def chat_stream(
         self,
         model: str,
-        messages: list,
-        thinking: bool = False,
+        messages: list[dict],
     ) -> AsyncGenerator[str, None]:
         """Async generator that yields content tokens as they arrive."""
-        payload = {
+        payload: dict[str, object] = {
             "model": model,
             "messages": messages,
             "stream": True,
-            "thinking": thinking,
         }
 
         session = await self._get_session()
@@ -75,30 +82,34 @@ class LMStudioClient:
             f"{self.url}/v1/chat/completions",
             json=payload,
             headers=self._headers(),
+            timeout=aiohttp.ClientTimeout(total=300),
         ) as resp:
+            if resp.status == 404:
+                _LOGGER.error(
+                    "LM Studio returned 404 — is the server running at %s?", self.url
+                )
             resp.raise_for_status()
-            async for raw in resp.content:
-                if not raw:
+            async for line in resp.content:
+                decoded = line.decode("utf-8").strip()
+                if not decoded or not decoded.startswith("data:"):
                     continue
+                data_str = decoded[5:].strip()
+                if data_str == "[DONE]":
+                    break
                 try:
-                    decoded = raw.decode("utf-8").strip()
-                    if not decoded.startswith("data:"):
-                        continue
-                    data = decoded[5:].strip()
-                    if data == "[DONE]":
-                        break
-                    chunk = json.loads(data)
-                    delta = (
+                    chunk = json.loads(data_str)
+                    content = (
                         chunk.get("choices", [{}])[0]
                         .get("delta", {})
                         .get("content", "")
                     )
-                    if delta:
-                        yield delta
-                except Exception:
+                    if content:
+                        yield content
+                except (json.JSONDecodeError, KeyError, IndexError):
                     continue
 
     async def list_models(self) -> dict:
+        """List available models via OpenAI-compatible endpoint."""
         session = await self._get_session()
         async with session.get(
             f"{self.url}/v1/models", headers=self._headers()
@@ -106,32 +117,104 @@ class LMStudioClient:
             resp.raise_for_status()
             return await resp.json()
 
-    async def load_model(self, model: str) -> dict:
+    # ------------------------------------------------------------------
+    # LM Studio native API endpoints (model management)
+    # ------------------------------------------------------------------
+
+    async def load_model(self, model_id: str) -> dict:
+        """Load a model via LM Studio native API.
+
+        POST /api/v1/models/load
+        Body: {"instance_id": "<model>"}
+        """
         session = await self._get_session()
+        _LOGGER.info("Loading model %s via LM Studio API", model_id)
         async with session.post(
             f"{self.url}/api/v1/models/load",
-            json={"model": model},
+            json={"instance_id": model_id},
             headers=self._headers(),
+            timeout=aiohttp.ClientTimeout(total=60),
         ) as resp:
             resp.raise_for_status()
             return await resp.json()
 
-    async def unload_model(self, model: str) -> dict:
+    async def unload_model(self, model_id: str) -> dict:
+        """Unload a model via LM Studio native API.
+
+        POST /api/v1/models/unload
+        Body: {"instance_id": "<model>"}
+        """
         session = await self._get_session()
+        _LOGGER.info("Unloading model %s via LM Studio API", model_id)
         async with session.post(
             f"{self.url}/api/v1/models/unload",
-            json={"model": model, "instance_id": model},
+            json={"instance_id": model_id},
             headers=self._headers(),
         ) as resp:
             resp.raise_for_status()
             return await resp.json()
 
-    async def download_model(self, model: str) -> dict:
+    async def get_chat_state(self) -> dict:
+        """Get current chat / model state via LM Studio native API.
+
+        GET /api/v1/chat/get
+        Returns info about currently loaded model, context, etc.
+        """
         session = await self._get_session()
-        async with session.post(
-            f"{self.url}/api/v1/models/download",
-            json={"model": model},
-            headers=self._headers(),
+        async with session.get(
+            f"{self.url}/api/v1/chat/get", headers=self._headers()
         ) as resp:
             resp.raise_for_status()
             return await resp.json()
+
+    async def get_loaded_models(self) -> dict:
+        """Get list of currently loaded model instances.
+
+        GET /api/v1/models
+        (LM Studio native endpoint, different from OpenAI /v1/models)
+        """
+        session = await self._get_session()
+        async with session.get(
+            f"{self.url}/api/v1/models", headers=self._headers()
+        ) as resp:
+            if resp.status == 404:
+                _LOGGER.debug("Native /api/v1/models not available, falling back")
+                return {"data": []}
+            resp.raise_for_status()
+            return await resp.json()
+
+    async def download_model(self, model_id: str) -> dict:
+        """Trigger a model download via LM Studio native API.
+
+        POST /api/v1/models/download
+        Body: {"instance_id": "<model>"}
+        """
+        session = await self._get_session()
+        _LOGGER.info("Downloading model %s via LM Studio API", model_id)
+        async with session.post(
+            f"{self.url}/api/v1/models/download",
+            json={"instance_id": model_id},
+            headers=self._headers(),
+            timeout=aiohttp.ClientTimeout(total=60),
+        ) as resp:
+            if resp.status == 404:
+                _LOGGER.warning(
+                    "Download endpoint not available on this LM Studio version. "
+                    "Download the model through the LM Studio UI instead."
+                )
+                return {"status": "not_supported"}
+            resp.raise_for_status()
+            return await resp.json()
+
+    async def is_available(self) -> bool:
+        """Check if LM Studio server is reachable."""
+        try:
+            session = await self._get_session()
+            async with session.get(
+                f"{self.url}/v1/models",
+                headers=self._headers(),
+                timeout=aiohttp.ClientTimeout(total=5),
+            ) as resp:
+                return resp.status == 200
+        except Exception:
+            return False
