@@ -32,15 +32,13 @@ CHAT_SCHEMA = vol.Schema({
     vol.Optional("entry_id"): cv.string,
     vol.Optional("temperature"): vol.Any(vol.Range(0, 2), int),
     vol.Optional("context_length"): vol.All(cv.positive_int, vol.Range(256, 131072)),
-    vol.Optional("integrations"): vol.All(
-        [cv.schema({
-            vol.Required("type"): vol.Any("ephemeral_mcp", "plugin"),
-            vol.Optional("server_label"): cv.string,
-            vol.Optional("server_url"): cv.string,
-            vol.Optional("id"): cv.string,
-            vol.Optional("allowed_tools"): [cv.string],
-        })],
-    ),
+    vol.Optional("integrations"): [vol.Schema({
+        vol.Required("type"): vol.Any("ephemeral_mcp", "plugin"),
+        vol.Optional("server_label"): cv.string,
+        vol.Optional("server_url"): cv.string,
+        vol.Optional("id"): cv.string,
+        vol.Optional("allowed_tools"): [cv.string],
+    })],
 })
 
 
