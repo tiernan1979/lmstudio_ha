@@ -1,59 +1,89 @@
 {
   "config": {
-    "step": {
-      "user": {
-        "title": "Connect to LM Studio",
-        "description": "Enter the URL of your running LM Studio instance.",
-        "data": {
-          "url": "LM Studio URL",
-          "api_key": "API Key (optional)"
-        }
-      },
-      "options": {
-        "title": "Configure LM Studio",
-        "description": "Select models and configure behavior.",
-        "data": {
-          "model": "Default Model",
-          "smart_model": "Smart Model (for complex queries, optional)",
-          "fast_model": "Fast Model (for short queries, optional)",
-          "system_prompt": "System Prompt",
-          "idle_timeout": "Idle Timeout (minutes)",
-          "streaming": "Enable Streaming",
-          "thinking": "Thinking Mode",
-          "use_tools": "Enable Home Assistant Tools"
-        }
-      }
+    "abort": {
+      "already_configured": "This LM Studio server is already configured"
     },
     "error": {
-      "cannot_connect": "Cannot connect to LM Studio. Check the URL and ensure LM Studio is running.",
-      "no_models": "Connected but no models found. Load a model in LM Studio first."
+      "cannot_connect": "Failed to connect to LM Studio server. Check the URL and ensure the server is running.",
+      "invalid_url": "Invalid URL. Please provide a valid URL starting with http:// or https://",
+      "unknown": "Unexpected error"
     },
-    "abort": {
-      "already_configured": "LM Studio is already configured."
-    }
-  },
-  "options": {
     "step": {
-      "options": {
-        "title": "LM Studio Options",
-        "description": "Update your LM Studio configuration.",
+      "user": {
         "data": {
-          "model": "Default Model",
-          "smart_model": "Smart Model (for complex queries, optional)",
-          "fast_model": "Fast Model (for short queries, optional)",
-          "system_prompt": "System Prompt",
-          "idle_timeout": "Idle Timeout (minutes)",
-          "streaming": "Enable Streaming",
-          "thinking": "Thinking Mode",
-          "use_tools": "Enable Home Assistant Tools"
+          "api_key": "API Key (optional)",
+          "url": "Server URL"
         }
       }
     }
   },
-  "entity": {
-    "select": {
-      "model": {
-        "name": "Model"
+  "config_subentries": {
+    "ai_task_data": {
+      "abort": {
+        "cannot_connect": "Failed to connect to LM Studio server",
+        "entry_not_loaded": "Failed to add AI task. The configuration is disabled.",
+        "reconfigure_successful": "AI task reconfigured successfully"
+      },
+      "entry_type": "AI task",
+      "initiate_flow": {
+        "reconfigure": "Reconfigure AI task",
+        "user": "Add AI task"
+      },
+      "step": {
+        "set_options": {
+          "data": {
+            "context_length": "Context length (tokens)",
+            "flash_attention": "Flash Attention",
+            "idle_timeout": "Idle timeout (minutes)",
+            "max_history": "Max history messages",
+            "model": "Model",
+            "name": "Name",
+            "streaming": "Streaming"
+          },
+          "data_description": {
+            "context_length": "Maximum number of tokens the model can process in a single request. Higher values use more RAM.",
+            "flash_attention": "Enable flash attention for faster inference on compatible GPUs.",
+            "idle_timeout": "Minutes to keep model loaded after last use before unloading. Set 0 to keep loaded indefinitely.",
+            "max_history": "Maximum number of previous conversation exchanges to keep in context.",
+            "streaming": "Stream tokens back to the user in real-time as they are generated."
+          }
+        }
+      }
+    },
+    "conversation": {
+      "abort": {
+        "cannot_connect": "Failed to connect to LM Studio server",
+        "entry_not_loaded": "Failed to add agent. The configuration is disabled.",
+        "reconfigure_successful": "Conversation agent reconfigured successfully"
+      },
+      "entry_type": "Conversation agent",
+      "initiate_flow": {
+        "reconfigure": "Reconfigure conversation agent",
+        "user": "Add conversation agent"
+      },
+      "step": {
+        "set_options": {
+          "data": {
+            "context_length": "Context length (tokens)",
+            "flash_attention": "Flash Attention",
+            "idle_timeout": "Idle timeout (minutes)",
+            "llm_hass_api": "Home Assistant API access",
+            "max_history": "Max history messages",
+            "model": "Model",
+            "name": "Name",
+            "prompt": "Prompt template",
+            "streaming": "Streaming"
+          },
+          "data_description": {
+            "context_length": "Maximum number of tokens the model can process in a single request. Higher values use more RAM but allow processing more context.",
+            "flash_attention": "Enable flash attention for faster inference on compatible GPUs.",
+            "idle_timeout": "Minutes to keep model loaded after last use before unloading. Set 0 to keep loaded indefinitely.",
+            "llm_hass_api": "Choose which Home Assistant APIs the model can access to control devices and query state.",
+            "max_history": "Maximum number of previous conversation exchanges to keep in context.",
+            "prompt": "Custom instructions for how the LLM should behave and respond. Leave empty for default.",
+            "streaming": "Stream tokens back to the user in real-time as they are generated."
+          }
+        }
       }
     }
   }
