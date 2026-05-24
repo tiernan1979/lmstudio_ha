@@ -38,7 +38,7 @@ from .const import (
     CONF_FLASH_ATTENTION,
     CONF_IDLE_TIMEOUT,
     CONF_MAX_HISTORY,
-    CONF_NUM_CTX,
+    CONF_STREAMING,
     DEFAULT_AI_TASK_NAME,
     DEFAULT_CONVERSATION_NAME,
     DEFAULT_CONTEXT_LENGTH,
@@ -46,7 +46,7 @@ from .const import (
     DEFAULT_IDLE_TIMEOUT,
     DEFAULT_MAX_HISTORY,
     DEFAULT_NAME,
-    DEFAULT_NUM_CTX,
+    DEFAULT_STREAMING,
     DEFAULT_TIMEOUT,
     DOMAIN,
 )
@@ -278,6 +278,18 @@ def _subentry_config_option_schema(
         CONF_FLASH_ATTENTION,
         default=options.get(CONF_FLASH_ATTENTION, DEFAULT_FLASH_ATTENTION),
     )] = BooleanSelector()
+
+    schema[vol.Optional(
+        CONF_STREAMING,
+        default=options.get(CONF_STREAMING, DEFAULT_STREAMING),
+    )] = BooleanSelector()
+
+    schema[vol.Optional(
+        CONF_IDLE_TIMEOUT,
+        default=options.get(CONF_IDLE_TIMEOUT, DEFAULT_IDLE_TIMEOUT),
+    )] = NumberSelector(
+        NumberSelectorConfig(min=0, max=1440, step=1, mode=NumberSelectorMode.BOX)
+    )
 
     schema[vol.Optional(
         CONF_MAX_HISTORY,

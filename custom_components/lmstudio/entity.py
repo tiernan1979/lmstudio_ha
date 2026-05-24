@@ -18,10 +18,14 @@ from homeassistant.helpers.entity import Entity
 from .const import (
     CONF_CONTEXT_LENGTH,
     CONF_FLASH_ATTENTION,
+    CONF_IDLE_TIMEOUT,
     CONF_MAX_HISTORY,
+    CONF_STREAMING,
     DEFAULT_CONTEXT_LENGTH,
     DEFAULT_FLASH_ATTENTION,
+    DEFAULT_IDLE_TIMEOUT,
     DEFAULT_MAX_HISTORY,
+    DEFAULT_STREAMING,
     DOMAIN,
 )
 
@@ -152,11 +156,14 @@ class LmStudioBaseLLMEntity(Entity):
         model = settings[CONF_MODEL]
         context_length = int(settings.get(CONF_CONTEXT_LENGTH, DEFAULT_CONTEXT_LENGTH))
         flash_attention = settings.get(CONF_FLASH_ATTENTION, DEFAULT_FLASH_ATTENTION)
+        streaming = settings.get(CONF_STREAMING, DEFAULT_STREAMING)
+        idle_timeout = int(settings.get(CONF_IDLE_TIMEOUT, DEFAULT_IDLE_TIMEOUT))
 
         await self.model_manager.ensure_model(
             model,
             context_length=context_length,
             flash_attention=flash_attention,
+            idle_timeout_minutes=idle_timeout,
         )
 
         tools: list[dict[str, Any]] | None = None
@@ -165,6 +172,25 @@ class LmStudioBaseLLMEntity(Entity):
                 _format_tool(tool, chat_log.llm_api.custom_serializer)
                 for tool in chat_log.llm_api.tools
             ]
+            _LOGGER.debug(
+                "Sending %d tools to model: %s",
+                len(tools),
+                [t["function"]["name"] for t in tools],
+            )
+
+        messages = [_convert_content(c) for c in chat_log.content]
+        if not tools:
+            system_msgs = [m for m in messages if m.get("role") == "system"]
+            no_tool_hint = (
+                "You do NOT have access to any tools or function calling. "
+                "Only respond with natural language text."
+            )
+            if system_msgs:
+                system_msgs[-1]["content"] = (
+                    (system_msgs[-1].get("content") or "") + "\n\n" + no_tool_hint
+                )
+            else:
+                messages.insert(0, {"role": "system", "content": no_tool_hint})
 
         messages = [_convert_content(c) for c in chat_log.content]
         max_messages = int(settings.get(CONF_MAX_HISTORY, DEFAULT_MAX_HISTORY))
@@ -194,6 +220,7 @@ class LmStudioBaseLLMEntity(Entity):
                     messages=list(messages),
                     tools=tools,
                     max_tokens=max_tokens,
+                    stream=streaming,
                 )
             except Exception as err:
                 _LOGGER.error("Error talking to LM Studio: %s", err)

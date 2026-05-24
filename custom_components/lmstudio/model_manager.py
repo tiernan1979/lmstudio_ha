@@ -22,7 +22,11 @@ class ModelManager:
         model: str,
         context_length: int | None = None,
         flash_attention: bool | None = None,
+        idle_timeout_minutes: int | None = None,
     ) -> None:
+        if idle_timeout_minutes is not None and idle_timeout_minutes > 0:
+            self._idle_timeout = idle_timeout_minutes * 60
+
         self._last_used = time.time()
 
         if self._watch_task is None:

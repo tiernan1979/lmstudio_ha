@@ -34,14 +34,18 @@
           "data": {
             "context_length": "Context length (tokens)",
             "flash_attention": "Flash Attention",
+            "idle_timeout": "Idle timeout (minutes)",
             "max_history": "Max history messages",
             "model": "Model",
-            "name": "[%key:common::config_flow::data::name%]"
+            "name": "[%key:common::config_flow::data::name%]",
+            "streaming": "Streaming"
           },
           "data_description": {
             "context_length": "Maximum number of tokens the model can process in a single request. Higher values use more RAM.",
             "flash_attention": "Enable flash attention for faster inference on compatible GPUs.",
-            "max_history": "Maximum number of previous conversation exchanges to keep in context."
+            "idle_timeout": "Minutes to keep model loaded after last use before unloading. Set 0 to keep loaded indefinitely.",
+            "max_history": "Maximum number of previous conversation exchanges to keep in context.",
+            "streaming": "Stream tokens back to the user in real-time as they are generated."
           }
         }
       }
@@ -62,18 +66,22 @@
           "data": {
             "context_length": "Context length (tokens)",
             "flash_attention": "Flash Attention",
+            "idle_timeout": "Idle timeout (minutes)",
             "llm_hass_api": "[%key:common::config_flow::data::llm_hass_api%]",
             "max_history": "Max history messages",
             "model": "Model",
             "name": "[%key:common::config_flow::data::name%]",
-            "prompt": "[%key:common::config_flow::data::prompt%]"
+            "prompt": "[%key:common::config_flow::data::prompt%]",
+            "streaming": "Streaming"
           },
           "data_description": {
             "context_length": "Maximum number of tokens the model can process in a single request. Higher values use more RAM but allow processing more context.",
             "flash_attention": "Enable flash attention for faster inference on compatible GPUs.",
+            "idle_timeout": "Minutes to keep model loaded after last use before unloading. Set 0 to keep loaded indefinitely.",
             "llm_hass_api": "Choose which Home Assistant APIs the model can access to control devices and query state.",
             "max_history": "Maximum number of previous conversation exchanges to keep in context.",
-            "prompt": "Custom instructions for how the LLM should behave and respond. Leave empty for default."
+            "prompt": "Custom instructions for how the LLM should behave and respond. Leave empty for default.",
+            "streaming": "Stream tokens back to the user in real-time as they are generated."
           }
         }
       }

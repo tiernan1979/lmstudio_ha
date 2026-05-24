@@ -129,17 +129,26 @@ class LMStudioClient:
         messages: list[dict],
         tools: list[dict] | None = None,
         max_tokens: int | None = None,
+        stream: bool = True,
     ) -> AsyncGenerator[dict[str, Any], None]:
         payload: dict[str, Any] = {
             "model": model,
             "messages": messages,
-            "stream": True,
+            "stream": stream,
         }
         if tools:
             payload["tools"] = tools
             payload["tool_choice"] = "auto"
         if max_tokens:
             payload["max_tokens"] = max_tokens
+
+        if not stream:
+            result = await self._chat_non_streaming(payload)
+            yield {"type": "content", "content": result.get("content", "")}
+            if result.get("tool_calls"):
+                yield {"type": "tool_calls", "tool_calls": result["tool_calls"]}
+            yield {"type": "done", "finish_reason": result.get("finish_reason", "stop")}
+            return
 
         accumulated_tool_calls: dict[int, dict] = {}
 
@@ -212,6 +221,41 @@ class LMStudioClient:
                         yield {"type": "tool_calls", "tool_calls": tool_calls}
                         yield {"type": "done", "finish_reason": "tool_calls"}
                         return
+
+    async def _chat_non_streaming(self, payload: dict) -> dict[str, Any]:
+        session = await self._get_session()
+        async with session.post(
+            f"{self.url}/v1/chat/completions",
+            json=payload,
+            headers=self._headers(),
+            timeout=aiohttp.ClientTimeout(total=300),
+        ) as resp:
+            resp.raise_for_status()
+            data = await resp.json()
+            choice = data.get("choices", [{}])[0]
+            message = choice.get("message", {})
+            result: dict[str, Any] = {
+                "content": message.get("content", ""),
+                "finish_reason": choice.get("finish_reason", "stop"),
+            }
+            tool_calls = message.get("tool_calls")
+            if tool_calls:
+                parsed = []
+                for tc in tool_calls:
+                    try:
+                        args = json.loads(tc["function"]["arguments"])
+                    except (json.JSONDecodeError, KeyError):
+                        args = tc.get("function", {}).get("arguments", {})
+                    parsed.append({
+                        "id": tc.get("id", ""),
+                        "type": "function",
+                        "function": {
+                            "name": tc["function"]["name"],
+                            "arguments": args,
+                        },
+                    })
+                result["tool_calls"] = parsed
+            return result
 
 
 def _assemble_tool_calls(
