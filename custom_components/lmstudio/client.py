@@ -44,7 +44,7 @@ class LMStudioClient:
     async def load_model(self, model_id: str) -> dict:
         session = await self._get_session()
         _LOGGER.info("Loading model %s", model_id)
-        payload = {"model": model_id, "instance_id": model_id}
+        payload = {"model": model_id}
         async with session.post(
             f"{self.url}/api/v1/models/load",
             json=payload,
@@ -60,7 +60,7 @@ class LMStudioClient:
     async def unload_model(self, model_id: str) -> dict:
         session = await self._get_session()
         _LOGGER.info("Unloading model %s", model_id)
-        payload = {"model": model_id, "instance_id": model_id}
+        payload = {"model": model_id}
         async with session.post(
             f"{self.url}/api/v1/models/unload",
             json=payload,
