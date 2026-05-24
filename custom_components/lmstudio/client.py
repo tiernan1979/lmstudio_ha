@@ -15,7 +15,6 @@ class LMStudioClient:
         self.url = url.rstrip("/")
         self.api_key = api_key
         self._session: aiohttp.ClientSession | None = None
-        self._lock = asyncio.Lock()
 
     async def _get_session(self) -> aiohttp.ClientSession:
         if self._session is None or self._session.closed:
@@ -41,15 +40,56 @@ class LMStudioClient:
             data = await resp.json()
             return [m["id"] for m in data.get("data", []) if "id" in m]
 
-    async def load_model(self, model_id: str) -> dict:
+    async def list_native_models(self) -> list[dict[str, Any]]:
         session = await self._get_session()
-        _LOGGER.info("Loading model %s", model_id)
-        payload = {"model": model_id}
+        async with session.get(
+            f"{self.url}/api/v1/models", headers=self._headers()
+        ) as resp:
+            if resp.status == 404:
+                return []
+            resp.raise_for_status()
+            data = await resp.json()
+            return data.get("models", [])
+
+    def _is_model_loaded(self, model_id: str, native_models: list[dict]) -> bool:
+        for m in native_models:
+            if m.get("key") == model_id:
+                instances = m.get("loaded_instances", [])
+                for inst in instances:
+                    if inst.get("id") == model_id:
+                        return True
+        return False
+
+    async def is_model_loaded(self, model_id: str) -> bool:
+        try:
+            native = await self.list_native_models()
+            return self._is_model_loaded(model_id, native)
+        except Exception:
+            return False
+
+    async def load_model(
+        self,
+        model_id: str,
+        context_length: int | None = None,
+        flash_attention: bool | None = None,
+    ) -> dict:
+        session = await self._get_session()
+        payload: dict[str, Any] = {"model": model_id}
+        if context_length is not None:
+            payload["context_length"] = context_length
+        if flash_attention is not None:
+            payload["flash_attention"] = flash_attention
+        payload["echo_load_config"] = True
+
+        _LOGGER.info(
+            "Loading model %s with config: context_length=%s, flash_attention=%s",
+            model_id, context_length, flash_attention,
+        )
         async with session.post(
             f"{self.url}/api/v1/models/load",
             json=payload,
             headers=self._headers(),
-            timeout=aiohttp.ClientTimeout(total=60),
+            timeout=aiohttp.ClientTimeout(total=120),
         ) as resp:
             if resp.status >= 400:
                 text = await resp.text()
@@ -60,10 +100,9 @@ class LMStudioClient:
     async def unload_model(self, model_id: str) -> dict:
         session = await self._get_session()
         _LOGGER.info("Unloading model %s", model_id)
-        payload = {"model": model_id}
         async with session.post(
             f"{self.url}/api/v1/models/unload",
-            json=payload,
+            json={"model": model_id},
             headers=self._headers(),
         ) as resp:
             if resp.status >= 400:

@@ -19,6 +19,7 @@ from homeassistant.const import CONF_API_KEY, CONF_LLM_HASS_API, CONF_MODEL, CON
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import config_validation as cv, llm
 from homeassistant.helpers.selector import (
+    BooleanSelector,
     NumberSelector,
     NumberSelectorConfig,
     NumberSelectorMode,
@@ -33,11 +34,15 @@ from homeassistant.helpers.selector import (
 
 from .client import LMStudioClient
 from .const import (
+    CONF_CONTEXT_LENGTH,
+    CONF_FLASH_ATTENTION,
     CONF_IDLE_TIMEOUT,
     CONF_MAX_HISTORY,
     CONF_NUM_CTX,
     DEFAULT_AI_TASK_NAME,
     DEFAULT_CONVERSATION_NAME,
+    DEFAULT_CONTEXT_LENGTH,
+    DEFAULT_FLASH_ATTENTION,
     DEFAULT_IDLE_TIMEOUT,
     DEFAULT_MAX_HISTORY,
     DEFAULT_NAME,
@@ -220,10 +225,10 @@ def _subentry_config_option_schema(
     schema: dict = {}
 
     if is_new:
-        if subentry_type == "ai_task_data":
-            default_name = DEFAULT_AI_TASK_NAME
-        else:
-            default_name = DEFAULT_CONVERSATION_NAME
+        default_name = (
+            DEFAULT_AI_TASK_NAME if subentry_type == "ai_task_data"
+            else DEFAULT_CONVERSATION_NAME
+        )
         schema[vol.Required(CONF_NAME, default=default_name)] = str
 
     schema[vol.Required(
@@ -257,16 +262,29 @@ def _subentry_config_option_schema(
         )
 
     schema[vol.Optional(
-        CONF_NUM_CTX,
-        description={"suggested_value": options.get(CONF_NUM_CTX, DEFAULT_NUM_CTX)},
+        CONF_CONTEXT_LENGTH,
+        default=options.get(CONF_CONTEXT_LENGTH, DEFAULT_CONTEXT_LENGTH),
+        description={"suggested_value": options.get(CONF_CONTEXT_LENGTH, DEFAULT_CONTEXT_LENGTH)},
     )] = NumberSelector(
-        NumberSelectorConfig(min=256, step=1, mode=NumberSelectorMode.BOX)
+        NumberSelectorConfig(
+            min=256,
+            max=131072,
+            step=1,
+            mode=NumberSelectorMode.BOX,
+        )
     )
+
+    schema[vol.Optional(
+        CONF_FLASH_ATTENTION,
+        default=options.get(CONF_FLASH_ATTENTION, DEFAULT_FLASH_ATTENTION),
+    )] = BooleanSelector()
+
     schema[vol.Optional(
         CONF_MAX_HISTORY,
+        default=options.get(CONF_MAX_HISTORY, DEFAULT_MAX_HISTORY),
         description={"suggested_value": options.get(CONF_MAX_HISTORY, DEFAULT_MAX_HISTORY)},
     )] = NumberSelector(
-        NumberSelectorConfig(min=0, step=1, mode=NumberSelectorMode.BOX)
+        NumberSelectorConfig(min=0, max=200, step=1, mode=NumberSelectorMode.BOX)
     )
 
     return schema

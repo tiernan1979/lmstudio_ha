@@ -16,10 +16,12 @@ from homeassistant.helpers import device_registry as dr, llm
 from homeassistant.helpers.entity import Entity
 
 from .const import (
+    CONF_CONTEXT_LENGTH,
+    CONF_FLASH_ATTENTION,
     CONF_MAX_HISTORY,
-    CONF_NUM_CTX,
+    DEFAULT_CONTEXT_LENGTH,
+    DEFAULT_FLASH_ATTENTION,
     DEFAULT_MAX_HISTORY,
-    DEFAULT_NUM_CTX,
     DOMAIN,
 )
 
@@ -148,8 +150,14 @@ class LmStudioBaseLLMEntity(Entity):
     ) -> None:
         settings = {**self.entry.data, **self.subentry.data}
         model = settings[CONF_MODEL]
+        context_length = int(settings.get(CONF_CONTEXT_LENGTH, DEFAULT_CONTEXT_LENGTH))
+        flash_attention = settings.get(CONF_FLASH_ATTENTION, DEFAULT_FLASH_ATTENTION)
 
-        await self.model_manager.ensure_model(model)
+        await self.model_manager.ensure_model(
+            model,
+            context_length=context_length,
+            flash_attention=flash_attention,
+        )
 
         tools: list[dict[str, Any]] | None = None
         if chat_log.llm_api:
@@ -177,7 +185,7 @@ class LmStudioBaseLLMEntity(Entity):
                 + json.dumps(output_format)
             )
 
-        max_tokens = int(settings.get(CONF_NUM_CTX, DEFAULT_NUM_CTX))
+        max_tokens = int(settings.get(CONF_CONTEXT_LENGTH, DEFAULT_CONTEXT_LENGTH))
 
         for _iteration in range(MAX_TOOL_ITERATIONS):
             try:

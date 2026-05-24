@@ -17,13 +17,24 @@ class ModelManager:
         self._loaded_model: str | None = None
         self._last_used: float = 0
 
-    async def ensure_model(self, model: str) -> None:
+    async def ensure_model(
+        self,
+        model: str,
+        context_length: int | None = None,
+        flash_attention: bool | None = None,
+    ) -> None:
         self._last_used = time.time()
 
         if self._watch_task is None:
             self._watch_task = self.hass.async_create_task(self._idle_loop())
 
-        if self._loaded_model == model:
+        if self._loaded_model == model and self._loaded_model is not None:
+            return
+
+        already_loaded = await self.client.is_model_loaded(model)
+        if already_loaded:
+            _LOGGER.debug("Model %s is already loaded on server", model)
+            self._loaded_model = model
             return
 
         if self._loaded_model:
@@ -34,7 +45,11 @@ class ModelManager:
                 _LOGGER.debug("Failed to unload previous model %s, proceeding", self._loaded_model)
 
         _LOGGER.debug("Loading model: %s", model)
-        await self.client.load_model(model)
+        await self.client.load_model(
+            model,
+            context_length=context_length,
+            flash_attention=flash_attention,
+        )
         self._loaded_model = model
 
     async def _idle_loop(self) -> None:
@@ -45,11 +60,16 @@ class ModelManager:
                     continue
                 idle_time = time.time() - self._last_used
                 if idle_time > self._idle_timeout:
-                    _LOGGER.debug("Model idle timeout - unloading model: %s", self._loaded_model)
+                    _LOGGER.debug(
+                        "Model idle timeout (%ss > %ss) - unloading: %s",
+                        idle_time, self._idle_timeout, self._loaded_model,
+                    )
                     try:
                         await self.client.unload_model(self._loaded_model)
                     except Exception as err:
-                        _LOGGER.debug("Unload API call failed (%s), clearing local tracking only", err)
+                        _LOGGER.debug(
+                            "Unload API call failed (%s), clearing local tracking only", err
+                        )
                     self._loaded_model = None
         except asyncio.CancelledError:
             return
