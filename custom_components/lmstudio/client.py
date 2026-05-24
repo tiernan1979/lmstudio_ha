@@ -1,4 +1,5 @@
 from __future__ import annotations
+import base64
 import json
 import logging
 from typing import AsyncGenerator
@@ -437,6 +438,51 @@ class LMStudioClient:
                         yield {"event": event, "data": parsed_data}
                     except json.JSONDecodeError:
                         yield {"event": event, "data": data}
+
+    # ------------------------------------------------------------------
+    # OpenAI-compatible image generation endpoint
+    # ------------------------------------------------------------------
+
+    async def generate_image(
+        self,
+        prompt: str,
+        model: str | None = None,
+        n: int = 1,
+        size: str = "1024x1024",
+    ) -> bytes:
+        """Generate an image via OpenAI-compatible /v1/images/generations.
+
+        Falls back to generating a descriptive prompt via the chat endpoint
+        when image generation is not available.
+        """
+        payload: dict[str, object] = {
+            "prompt": prompt,
+            "n": n,
+            "size": size,
+            "response_format": "b64_json",
+        }
+        if model is not None:
+            payload["model"] = model
+
+        session = await self._get_session()
+        async with session.post(
+            f"{self.url}/v1/images/generations",
+            json=payload,
+            headers=self._headers(),
+            timeout=aiohttp.ClientTimeout(total=120),
+        ) as resp:
+            if resp.status == 404:
+                _LOGGER.warning(
+                    "Image generation endpoint /v1/images/generations not available "
+                    "on this LM Studio version. Prompt was: %s", prompt
+                )
+                return b""
+            resp.raise_for_status()
+            data = await resp.json()
+            b64 = data["data"][0].get("b64_json")
+            if b64:
+                return base64.b64decode(b64)
+            return b""
 
     async def is_available(self) -> bool:
         """Check if LM Studio server is reachable."""

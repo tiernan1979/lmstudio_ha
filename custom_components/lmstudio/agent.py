@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 import logging
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
+
+if TYPE_CHECKING:
+    from .model_manager import ModelManager
 
 from homeassistant.components.conversation.models import (
     AbstractConversationAgent,
@@ -22,7 +25,6 @@ from .const import (
     DEFAULT_USE_TOOLS,
     HA_TOOLS,
 )
-from .model_manager import ModelManager
 from .memory import Memory
 from .model_router import ModelRouter, LIST_MODELS
 from .tool_executor import ToolExecutor
@@ -41,6 +43,7 @@ class LMStudioConversationAgent(AbstractConversationAgent):
         self,
         hass: HomeAssistant,
         client: LMStudioClient,
+        model_manager: ModelManager,
         entry_id: str,
         entry_data: dict[str, Any],
     ) -> None:
@@ -52,7 +55,7 @@ class LMStudioConversationAgent(AbstractConversationAgent):
         self._memory = Memory(hass)
         self._router = ModelRouter(entry_data)
         self._tools = ToolExecutor(hass, entry_id)
-        self._manager = ModelManager(hass, client, entry_id)
+        self._manager = model_manager
 
     async def async_process(
         self,

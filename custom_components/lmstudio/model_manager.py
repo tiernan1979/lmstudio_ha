@@ -3,7 +3,7 @@ import asyncio
 import logging
 import time
 
-from .const import DOMAIN
+from .const import CONF_IDLE_TIMEOUT, DEFAULT_IDLE_TIMEOUT, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -23,7 +23,7 @@ class ModelManager:
 
         if not self._initialized:
             self._initialized = True
-            self._watch_task = asyncio.create_task(self._idle_loop())
+            self._watch_task = self.hass.async_create_task(self._idle_loop())
 
         if state.get("loaded_model") == model:
             return
@@ -41,9 +41,6 @@ class ModelManager:
                 if state is None:
                     return
 
-                if state.get("tool_running"):
-                    continue
-
                 loaded_model = state.get("loaded_model")
                 if not loaded_model:
                     continue
@@ -58,7 +55,6 @@ class ModelManager:
                     except Exception as err:
                         _LOGGER.debug("Unload API call failed (%s), clearing local tracking only", err)
                     state["loaded_model"] = None
-                    return
 
         except asyncio.CancelledError:
             return
