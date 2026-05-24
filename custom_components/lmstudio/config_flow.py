@@ -188,6 +188,11 @@ class LMStudioSubentryFlowHandler(ConfigSubentryFlow):
         if self._is_new:
             self._name = user_input.pop(CONF_NAME)
 
+            if self._subentry_type == "conversation" and self._name == DEFAULT_CONVERSATION_NAME:
+                model = user_input.get(CONF_MODEL, "")
+                model_short = model.partition(":")[0].strip()
+                self._name = f"LM Studio {model_short}" if model_short else DEFAULT_CONVERSATION_NAME
+
             return self.async_create_entry(
                 title=self._name,
                 data=user_input,

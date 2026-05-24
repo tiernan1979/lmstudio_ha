@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+from datetime import datetime
 from collections.abc import AsyncGenerator, AsyncIterator, Callable
 from typing import Any
 
@@ -33,6 +34,30 @@ MAX_TOOL_ITERATIONS = 10
 
 _LOGGER = logging.getLogger(__name__)
 
+BUILTIN_TOOLS = {
+    "get_current_time": {
+        "description": "Get the current date and time in the user's timezone. Returns the current time, date, and timezone.",
+        "parameters": {"type": "object", "properties": {}},
+    },
+    "get_current_date": {
+        "description": "Get the current date. Returns today's date.",
+        "parameters": {"type": "object", "properties": {}},
+    },
+    "get_live_context": {
+        "description": "Search for all Home Assistant entities in a given domain (e.g. 'light', 'switch', 'sensor', 'climate'). Returns each entity's ID, state, and friendly name. Use this to discover entities before controlling them.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "domain": {
+                    "type": "string",
+                    "description": "The entity domain to search (e.g., 'light', 'switch', 'sensor', 'climate', 'cover', 'lock')"
+                }
+            },
+            "required": ["domain"],
+        },
+    },
+}
+
 
 def _format_tool(
     tool: llm.Tool, custom_serializer: Callable[[Any], Any] | None
@@ -47,6 +72,17 @@ def _format_tool(
     if tool.description:
         tool_spec["function"]["description"] = tool.description
     return tool_spec
+
+
+def _format_builtin_tool(name: str, spec: dict) -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": name,
+            "description": spec["description"],
+            "parameters": spec["parameters"],
+        },
+    }
 
 
 def _convert_content(
@@ -119,6 +155,46 @@ async def _transform_stream(
         yield chunk
 
 
+def _is_builtin_tool_error(content, tool_name: str) -> bool:
+    if not isinstance(content, conversation.ToolResultContent):
+        return False
+    result = content.tool_result
+    if isinstance(result, dict):
+        err = result.get("error_text", "") or ""
+        return f'Tool "{tool_name}" not found' in err
+    return False
+
+
+def _execute_builtin_tool(tool_name: str, args: dict, hass) -> dict:
+    now = datetime.now()
+    if tool_name == "get_current_time":
+        return {
+            "current_time": now.strftime("%I:%M %p"),
+            "current_date": now.strftime("%A, %B %d, %Y"),
+            "timezone": str(hass.config.time_zone),
+        }
+    if tool_name == "get_current_date":
+        return {
+            "date": now.strftime("%A, %B %d, %Y"),
+        }
+    if tool_name == "get_live_context":
+        domain = args.get("domain", "").lower()
+        entities = []
+        for state in hass.states.async_all():
+            if state.domain == domain:
+                entities.append({
+                    "entity_id": state.entity_id,
+                    "state": state.state,
+                    "name": state.attributes.get("friendly_name", state.entity_id),
+                })
+        return {
+            "domain": domain,
+            "count": len(entities),
+            "entities": entities,
+        }
+    return {"error": f"Unknown builtin tool: {tool_name}"}
+
+
 class LmStudioBaseLLMEntity(Entity):
 
     _attr_has_entity_name = True
@@ -152,6 +228,7 @@ class LmStudioBaseLLMEntity(Entity):
         chat_log: conversation.ChatLog,
         structure: vol.Schema | None = None,
     ) -> None:
+        hass = self.hass
         settings = {**self.entry.data, **self.subentry.data}
         model = settings[CONF_MODEL]
         context_length = int(settings.get(CONF_CONTEXT_LENGTH, DEFAULT_CONTEXT_LENGTH))
@@ -166,17 +243,22 @@ class LmStudioBaseLLMEntity(Entity):
             idle_timeout_minutes=idle_timeout,
         )
 
-        tools: list[dict[str, Any]] | None = None
+        ha_tools: list[dict[str, Any]] = []
         if chat_log.llm_api:
-            tools = [
+            ha_tools = [
                 _format_tool(tool, chat_log.llm_api.custom_serializer)
                 for tool in chat_log.llm_api.tools
             ]
             _LOGGER.debug(
-                "Sending %d tools to model: %s",
-                len(tools),
-                [t["function"]["name"] for t in tools],
+                "HA tools available: %s",
+                [t["function"]["name"] for t in ha_tools],
             )
+
+        builtin_tools = [
+            _format_builtin_tool(name, spec)
+            for name, spec in BUILTIN_TOOLS.items()
+        ]
+        tools = ha_tools + builtin_tools if ha_tools else None
 
         messages = [_convert_content(c) for c in chat_log.content]
         if not tools:
@@ -191,8 +273,18 @@ class LmStudioBaseLLMEntity(Entity):
                 )
             else:
                 messages.insert(0, {"role": "system", "content": no_tool_hint})
+        else:
+            now = datetime.now()
+            time_context = (
+                f"\n\nCurrent date and time: {now.strftime('%A, %B %d, %Y at %I:%M %p')}\n"
+                f"Timezone: {hass.config.time_zone}\n"
+            )
+            system_msgs = [m for m in messages if m.get("role") == "system"]
+            if system_msgs:
+                system_msgs[-1]["content"] = (
+                    (system_msgs[-1].get("content") or "") + time_context
+                )
 
-        messages = [_convert_content(c) for c in chat_log.content]
         max_messages = int(settings.get(CONF_MAX_HISTORY, DEFAULT_MAX_HISTORY))
         self._trim_history(messages, max_messages)
 
@@ -229,11 +321,33 @@ class LmStudioBaseLLMEntity(Entity):
                 ) from err
 
             new_contents = [
-                content
-                async for content in chat_log.async_add_delta_content_stream(
+                c
+                async for c in chat_log.async_add_delta_content_stream(
                     self.entity_id, _transform_stream(result)
                 )
             ]
+
+            for i, content in enumerate(new_contents):
+                for tool_name in BUILTIN_TOOLS:
+                    if _is_builtin_tool_error(content, tool_name):
+                        tc_id = content.tool_call_id
+                        tc_args_str = ""
+                        for prev in new_contents[:i]:
+                            if isinstance(prev, conversation.AssistantContent):
+                                for tc in (prev.tool_calls or []):
+                                    if tc.id == tc_id:
+                                        tc_args_str = json.dumps(tc.tool_args)
+                        try:
+                            tc_args = json.loads(tc_args_str) if tc_args_str else {}
+                        except json.JSONDecodeError:
+                            tc_args = {}
+                        result_data = _execute_builtin_tool(tool_name, tc_args, hass)
+                        new_contents[i] = conversation.ToolResultContent(
+                            tool_call_id=tc_id,
+                            tool_result=result_data,
+                        )
+                        _LOGGER.debug("Executed builtin tool %s", tool_name)
+
             messages.extend(_convert_content(c) for c in new_contents)
 
             if not chat_log.unresponded_tool_results:
