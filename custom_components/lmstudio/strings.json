@@ -1,17 +1,77 @@
 {
   "config": {
+    "abort": {
+      "already_configured": "[%key:common::config_flow::abort::already_configured_service%]"
+    },
+    "error": {
+      "cannot_connect": "[%key:common::config_flow::error::cannot_connect%]",
+      "invalid_url": "[%key:common::config_flow::error::invalid_host%]",
+      "unknown": "[%key:common::config_flow::error::unknown%]"
+    },
     "step": {
       "user": {
-        "title": "LM Studio Server",
-        "description": "Enter the URL of your LM Studio server (e.g., http://localhost:1234).",
         "data": {
-          "url": "Server URL",
-          "api_key": "API Key (optional)"
+          "api_key": "[%key:common::config_flow::data::api_key%]",
+          "url": "[%key:common::config_flow::data::url%]"
+        }
+      }
+    }
+  },
+  "config_subentries": {
+    "ai_task_data": {
+      "abort": {
+        "cannot_connect": "[%key:common::config_flow::error::cannot_connect%]",
+        "entry_not_loaded": "Failed to add AI task. The configuration is disabled.",
+        "reconfigure_successful": "[%key:common::config_flow::abort::reconfigure_successful%]"
+      },
+      "entry_type": "AI task",
+      "initiate_flow": {
+        "reconfigure": "Reconfigure AI task",
+        "user": "Add AI task"
+      },
+      "step": {
+        "set_options": {
+          "data": {
+            "max_history": "Max history messages",
+            "model": "Model",
+            "name": "[%key:common::config_flow::data::name%]",
+            "num_ctx": "Context window size"
+          },
+          "data_description": {
+            "num_ctx": "Maximum number of text tokens the model can process. Lower to reduce RAM, or increase for complex tasks.",
+            "max_history": "Maximum number of conversation history messages to keep."
+          }
         }
       }
     },
-    "error": {
-      "invalid_url": "Please provide a valid URL starting with http:// or https://"
+    "conversation": {
+      "abort": {
+        "cannot_connect": "[%key:common::config_flow::error::cannot_connect%]",
+        "entry_not_loaded": "Failed to add agent. The configuration is disabled.",
+        "reconfigure_successful": "[%key:common::config_flow::abort::reconfigure_successful%]"
+      },
+      "entry_type": "Conversation agent",
+      "initiate_flow": {
+        "reconfigure": "Reconfigure conversation agent",
+        "user": "Add conversation agent"
+      },
+      "step": {
+        "set_options": {
+          "data": {
+            "llm_hass_api": "[%key:common::config_flow::data::llm_hass_api%]",
+            "max_history": "Max history messages",
+            "model": "Model",
+            "name": "[%key:common::config_flow::data::name%]",
+            "num_ctx": "Context window size",
+            "prompt": "[%key:common::config_flow::data::prompt%]"
+          },
+          "data_description": {
+            "max_history": "Maximum number of conversation history messages to keep.",
+            "num_ctx": "Maximum number of text tokens the model can process. Lower to reduce RAM, or increase for complex tasks.",
+            "prompt": "Instruct how the LLM should respond. This can be a template."
+          }
+        }
+      }
     }
   }
 }

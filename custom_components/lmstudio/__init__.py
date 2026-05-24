@@ -1,168 +1,74 @@
 """LM Studio integration for Home Assistant."""
 
 from __future__ import annotations
+
 import asyncio
 import logging
-from typing import Any
+from types import MappingProxyType
 
-from homeassistant.components.conversation import (
-    async_set_agent,
-    async_unset_agent,
-)
-from homeassistant.components.conversation.models import (
-    AbstractConversationAgent,
-)
+import aiohttp
+
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import CONF_API_KEY, CONF_URL, Platform
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryNotReady
+from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.typing import ConfigType
 
 from .client import LMStudioClient
-from .const import CONF_API_KEY, CONF_MODEL, CONF_URL, DOMAIN, PLATFORMS
+from .const import CONF_IDLE_TIMEOUT, DEFAULT_IDLE_TIMEOUT, DEFAULT_TIMEOUT, DOMAIN, PLATFORMS
 from .model_manager import ModelManager
-from .services import async_setup_services
 
 _LOGGER = logging.getLogger(__name__)
 
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
+
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
-    """Set up the LM Studio integration from yaml (not required)."""
-    hass.data.setdefault(DOMAIN, {})
-    await async_setup_services(hass)
     return True
 
 
-async def async_setup_entry(
-    hass: HomeAssistant, entry: ConfigEntry
-) -> bool:
-    """Set up a config entry."""
-    client = LMStudioClient({
-        "url": entry.data[CONF_URL],
-        "api_key": entry.data.get(CONF_API_KEY, ""),
-    })
+async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    url = entry.data[CONF_URL]
+    api_key = entry.data.get(CONF_API_KEY)
+    client = LMStudioClient(url, api_key)
 
-    available = await client.is_available()
-    if not available:
-        _LOGGER.warning(
-            "LM Studio server at %s is not reachable. "
-            "The integration will still be set up but requests may fail.",
-            entry.data[CONF_URL],
-        )
+    try:
+        async with asyncio.timeout(DEFAULT_TIMEOUT):
+            await client.list_models()
+    except (TimeoutError, aiohttp.ClientError) as err:
+        await client.close()
+        raise ConfigEntryNotReady(f"Cannot connect to LM Studio at {url}: {err}") from err
 
-    model_manager = ModelManager(hass, client, entry.entry_id)
+    model_manager = ModelManager(
+        hass, client, entry.entry_id,
+        idle_timeout_minutes=entry.options.get(CONF_IDLE_TIMEOUT, DEFAULT_IDLE_TIMEOUT),
+    )
 
-    hass.data.setdefault(DOMAIN, {})
-    hass.data[DOMAIN][entry.entry_id] = {
+    entry.runtime_data = {
         "client": client,
-        "data": dict(entry.data),
         "model_manager": model_manager,
     }
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
-    agent = _create_agent(hass, client, model_manager, entry)
-    hass.data[DOMAIN][entry.entry_id]["agent"] = agent
-    async_set_agent(hass, entry, agent)
-
-    entry.async_on_unload(
-        lambda: async_unset_agent(hass, entry)
-    )
-
-    await _async_setup_ai_task_entity(hass, client, model_manager, entry)
+    entry.async_on_unload(entry.add_update_listener(async_update_options))
 
     return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Unload a config entry."""
-    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    if not await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
+        return False
 
-    state = hass.data[DOMAIN].pop(entry.entry_id, None)
-    if state:
-        if "model_manager" in state:
-            state["model_manager"].stop()
-        if "client" in state:
-            await state["client"].close()
-        if "ai_task_entity" in state:
-            await _async_remove_ai_task_entity(hass, state["ai_task_entity"])
+    runtime = entry.runtime_data
+    if "model_manager" in runtime:
+        runtime["model_manager"].stop()
+    if "client" in runtime:
+        await runtime["client"].close()
 
-    return unload_ok
+    return True
 
 
-async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Handle removal of an entry."""
-    state = hass.data[DOMAIN].pop(entry.entry_id, None)
-    if state:
-        if "model_manager" in state:
-            state["model_manager"].stop()
-        if "client" in state:
-            await state["client"].close()
-
-
-def _create_agent(
-    hass: HomeAssistant,
-    client: LMStudioClient,
-    model_manager: ModelManager,
-    entry: ConfigEntry,
-) -> AbstractConversationAgent:
-    """Create the conversation agent for this config entry."""
-    from .agent import LMStudioConversationAgent
-
-    return LMStudioConversationAgent(
-        hass=hass,
-        client=client,
-        model_manager=model_manager,
-        entry_id=entry.entry_id,
-        entry_data=dict(entry.data),
-    )
-
-
-async def _async_setup_ai_task_entity(
-    hass: HomeAssistant,
-    client: LMStudioClient,
-    model_manager: ModelManager,
-    entry: ConfigEntry,
-) -> None:
-    """Register the AI Task entity if the ai_task integration is loaded."""
-    try:
-        from homeassistant.components.ai_task.const import DATA_COMPONENT
-        from homeassistant.helpers.entity_component import EntityComponent
-        from homeassistant.components.ai_task.entity import AITaskEntity
-
-        from .ai_task_entity import LMStudioAITaskEntity
-
-        component: EntityComponent[AITaskEntity] = hass.data.get(DATA_COMPONENT)
-        if component is None:
-            _LOGGER.debug(
-                "ai_task integration not loaded, skipping AI Task entity registration"
-            )
-            return
-
-        entity = LMStudioAITaskEntity(
-            hass=hass,
-            client=client,
-            model_manager=model_manager,
-            entry_id=entry.entry_id,
-            entry_data=dict(entry.data),
-        )
-        await component.async_add_entities([entity])
-
-        hass.data[DOMAIN][entry.entry_id]["ai_task_entity"] = entity
-        _LOGGER.debug("Registered LM Studio AI Task entity")
-    except Exception as err:
-        _LOGGER.warning("Failed to register AI Task entity: %s", err)
-
-
-async def _async_remove_ai_task_entity(
-    hass: HomeAssistant, entity: Any
-) -> None:
-    """Remove the AI Task entity."""
-    try:
-        from homeassistant.components.ai_task.const import DATA_COMPONENT
-        from homeassistant.helpers.entity_component import EntityComponent
-        from homeassistant.components.ai_task.entity import AITaskEntity
-
-        component: EntityComponent[AITaskEntity] = hass.data.get(DATA_COMPONENT)
-        if component is not None:
-            await component.async_remove_entity(entity.entity_id)
-    except Exception as err:
-        _LOGGER.debug("Error removing AI Task entity: %s", err)
+async def async_update_options(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    await hass.config_entries.async_reload(entry.entry_id)
