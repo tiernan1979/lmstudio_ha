@@ -1,6 +1,5 @@
 """Conversation platform for LM Studio."""
 
-import dataclasses
 from typing import Literal
 
 from homeassistant.components import conversation
@@ -81,19 +80,19 @@ class LmStudioConversationEntity(
         await self._async_handle_chat_log(chat_log)
 
         if not settings.get(CONF_SHOW_TOOL_CALLS, DEFAULT_SHOW_TOOL_CALLS):
-            stripped = []
-            for c in chat_log.content:
-                if isinstance(c, conversation.ToolResultContent):
-                    continue
-                if isinstance(c, conversation.AssistantContent) and c.tool_calls:
-                    stripped.append(dataclasses.replace(c, tool_calls=None))
-                    continue
-                stripped.append(c)
-            chat_log.content = stripped
+            last_content = chat_log.content[-1]
+            speech = last_content.content if isinstance(last_content, conversation.AssistantContent) and last_content.content else ""
 
-        result = conversation.async_get_result_from_chat_log(user_input, chat_log)
-
-        if not settings.get(CONF_SHOW_TOOL_CALLS, DEFAULT_SHOW_TOOL_CALLS):
+            result = conversation.ConversationResult(
+                response=intent.IntentResponse(
+                    language=user_input.language,
+                ),
+                conversation_id=chat_log.conversation_id,
+                continue_conversation=chat_log.continue_conversation,
+            )
+            result.response.async_set_speech(speech)
             result.response.response_type = intent.IntentResponseType.QUERY_ANSWER
+        else:
+            result = conversation.async_get_result_from_chat_log(user_input, chat_log)
 
         return result

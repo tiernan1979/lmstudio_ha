@@ -302,8 +302,11 @@ class LmStudioBaseLLMEntity(Entity):
             tool_tips = (
                 "\n\nWhen controlling devices, first use get_live_context to discover entity IDs.\n"
                 "Only include non-empty parameters in tool calls — omit optional parameters that have no value.\n"
-                "For climate devices, use HassSetClimateMode to set hvac_mode (heat/cool/auto/off).\n"
-                "Always prefer calling services via the provided Hass* tools rather than HassCallService."
+                "Use HassLightSet for lights (brightness, color, color_temp).\n"
+                "Use HassSetPosition for covers/blinds (position) — NOT for lights.\n"
+                "Use HassSetClimateMode for climate devices (hvac_mode: heat/cool/auto/off).\n"
+                "When a tool call fails, read the error and retry with corrected parameters.\n"
+                "Always end your response with a natural language answer — do not leave the conversation hanging."
             )
             system_msgs = [m for m in messages if m.get("role") == "system"]
             if system_msgs:
