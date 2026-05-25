@@ -85,6 +85,18 @@ def _format_builtin_tool(name: str, spec: dict) -> dict[str, Any]:
     }
 
 
+def _sanitize_tool_args(args: Any) -> Any:
+    if isinstance(args, dict):
+        return {
+            k: _sanitize_tool_args(v)
+            for k, v in args.items()
+            if v is not None and v != ""
+        }
+    if isinstance(args, list):
+        return [_sanitize_tool_args(v) for v in args]
+    return args
+
+
 def _convert_content(
     chat_content: (
         conversation.Content
@@ -145,7 +157,7 @@ async def _transform_stream(
                 llm.ToolInput(
                     id=tc.get("id", ""),
                     tool_name=tc["function"]["name"],
-                    tool_args=tc["function"]["arguments"],
+                    tool_args=_sanitize_tool_args(tc["function"]["arguments"]),
                 )
                 for tc in event["tool_calls"]
             ]

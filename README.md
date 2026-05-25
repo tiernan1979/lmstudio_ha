@@ -2,7 +2,7 @@
 
 Integrate local large language models from [LM Studio](https://lmstudio.ai/) with Home Assistant. Chat with your LLM through the Home Assistant UI, voice assistants, or any conversation client — and have it query states, control devices, and call services in your smart home.
 
-![Version](https://img.shields.io/badge/version-1.0.0-blue)
+![Version](https://img.shields.io/badge/version-2.0.0-blue)
 ![Platform](https://img.shields.io/badge/platform-Home%20Assistant-orange)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
@@ -108,7 +108,7 @@ target:
 AI tasks generate structured data from natural language prompts. Use them via the `ai_task.run` service or through automations:
 
 ```yaml
-service: ai_task.generate_data
+service: ai_task.run
 data:
   prompt: "Create a weekly meal plan based on these ingredients: chicken, rice, broccoli"
 target:

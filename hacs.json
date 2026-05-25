@@ -1,7 +1,7 @@
 {
   "name": "LM Studio",
   "content_in_root": false,
-  "homeassistant": "2026.5.4",
+  "homeassistant": "2024.6.0",
   "render_readme": true,
   "domains": ["conversation"],
   "iot_class": "Local Polling"
