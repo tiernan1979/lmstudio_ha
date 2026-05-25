@@ -36,6 +36,7 @@
             "flash_attention": "Flash Attention",
             "idle_timeout": "Idle timeout (minutes)",
             "max_history": "Max history messages",
+            "max_tool_iterations": "Max tool call rounds",
             "model": "Model",
             "name": "Name",
             "streaming": "Streaming"
@@ -45,6 +46,7 @@
             "flash_attention": "Enable flash attention for faster inference on compatible GPUs.",
             "idle_timeout": "Minutes to keep model loaded after last use before unloading. Set 0 to keep loaded indefinitely.",
             "max_history": "Maximum number of previous conversation exchanges to keep in context.",
+            "max_tool_iterations": "How many rounds of tool calls the model can make before giving an answer. Higher values help complex tasks but may slow response.",
             "streaming": "Stream tokens back to the user in real-time as they are generated."
           }
         }
@@ -69,6 +71,7 @@
             "idle_timeout": "Idle timeout (minutes)",
             "llm_hass_api": "Home Assistant API access",
             "max_history": "Max history messages",
+            "max_tool_iterations": "Max tool call rounds",
             "model": "Model",
             "name": "Name",
             "prompt": "Prompt template",
@@ -81,6 +84,7 @@
             "idle_timeout": "Minutes to keep model loaded after last use before unloading. Set 0 to keep loaded indefinitely.",
             "llm_hass_api": "Choose which Home Assistant APIs the model can access to control devices and query state.",
             "max_history": "Maximum number of previous conversation exchanges to keep in context.",
+            "max_tool_iterations": "How many rounds of tool calls the model can make before giving an answer. Higher values help complex tasks but may slow response.",
             "prompt": "Custom instructions for how the LLM should behave and respond. Leave empty for default.",
             "show_tool_calls": "When enabled, the response will include details about which tools were called and their results.",
             "streaming": "Stream tokens back to the user in real-time as they are generated."

@@ -21,16 +21,16 @@ from .const import (
     CONF_FLASH_ATTENTION,
     CONF_IDLE_TIMEOUT,
     CONF_MAX_HISTORY,
+    CONF_MAX_TOOL_ITERATIONS,
     CONF_STREAMING,
     DEFAULT_CONTEXT_LENGTH,
     DEFAULT_FLASH_ATTENTION,
     DEFAULT_IDLE_TIMEOUT,
     DEFAULT_MAX_HISTORY,
+    DEFAULT_MAX_TOOL_ITERATIONS,
     DEFAULT_STREAMING,
     DOMAIN,
 )
-
-MAX_TOOL_ITERATIONS = 3
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -333,8 +333,9 @@ class LmStudioBaseLLMEntity(Entity):
             )
 
         max_tokens = int(settings.get(CONF_CONTEXT_LENGTH, DEFAULT_CONTEXT_LENGTH))
+        max_iterations = int(settings.get(CONF_MAX_TOOL_ITERATIONS, DEFAULT_MAX_TOOL_ITERATIONS))
 
-        for _iteration in range(MAX_TOOL_ITERATIONS):
+        for _iteration in range(max_iterations):
             try:
                 result = self.client.chat_completions(
                     model=model,
@@ -382,7 +383,7 @@ class LmStudioBaseLLMEntity(Entity):
             if not chat_log.unresponded_tool_results:
                 break
         else:
-            _LOGGER.error("Tool call iteration limit (%d) exceeded", MAX_TOOL_ITERATIONS)
+            _LOGGER.error("Tool call iteration limit (%d) exceeded", max_iterations)
             raise HomeAssistantError(
                 "The model did not complete its response within the allowed number of tool call rounds. "
                 "Try asking a simpler question or check the model's tool use capabilities."

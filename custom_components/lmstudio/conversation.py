@@ -1,16 +1,30 @@
 """Conversation platform for LM Studio."""
 
+import dataclasses
 from typing import Literal
 
 from homeassistant.components import conversation
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_LLM_HASS_API, CONF_PROMPT, MATCH_ALL
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import intent
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .const import CONF_SHOW_TOOL_CALLS, DEFAULT_SHOW_TOOL_CALLS, DOMAIN
 from .entity import LmStudioBaseLLMEntity
+
+
+def _strip_tool_content(chat_log: conversation.ChatLog) -> None:
+    stripped: list[conversation.Content] = []
+    for c in chat_log.content:
+        if isinstance(c, conversation.ToolResultContent):
+            continue
+        if isinstance(c, conversation.AssistantContent) and c.tool_calls:
+            stripped.append(dataclasses.replace(c, tool_calls=None))
+            continue
+        stripped.append(c)
+    chat_log.content = stripped
 
 
 async def async_setup_entry(
@@ -66,6 +80,7 @@ class LmStudioConversationEntity(
         chat_log: conversation.ChatLog,
     ) -> conversation.ConversationResult:
         settings = {**self.entry.data, **self.subentry.data}
+        hide_tools = not settings.get(CONF_SHOW_TOOL_CALLS, DEFAULT_SHOW_TOOL_CALLS)
 
         try:
             await chat_log.async_provide_llm_data(
@@ -77,21 +92,30 @@ class LmStudioConversationEntity(
         except conversation.ConverseError as err:
             return err.as_conversation_result()
 
-        await self._async_handle_chat_log(chat_log)
+        try:
+            await self._async_handle_chat_log(chat_log)
+        except HomeAssistantError:
+            if not hide_tools:
+                raise
 
-        if not settings.get(CONF_SHOW_TOOL_CALLS, DEFAULT_SHOW_TOOL_CALLS):
+        if hide_tools:
+            _strip_tool_content(chat_log)
+            intent_response = intent.IntentResponse(language=user_input.language)
+            intent_response.response_type = intent.IntentResponseType.QUERY_ANSWER
+
             last_content = chat_log.content[-1]
-            speech = last_content.content if isinstance(last_content, conversation.AssistantContent) and last_content.content else ""
+            if isinstance(last_content, conversation.AssistantContent) and last_content.content:
+                intent_response.async_set_speech(last_content.content)
+            else:
+                intent_response.async_set_speech(
+                    "Sorry, I had trouble processing your request. Please try again."
+                )
 
             result = conversation.ConversationResult(
-                response=intent.IntentResponse(
-                    language=user_input.language,
-                ),
+                response=intent_response,
                 conversation_id=chat_log.conversation_id,
-                continue_conversation=chat_log.continue_conversation,
+                continue_conversation=False,
             )
-            result.response.async_set_speech(speech)
-            result.response.response_type = intent.IntentResponseType.QUERY_ANSWER
         else:
             result = conversation.async_get_result_from_chat_log(user_input, chat_log)
 
