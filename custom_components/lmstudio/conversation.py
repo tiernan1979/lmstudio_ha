@@ -3,10 +3,10 @@
 from typing import Literal
 
 from homeassistant.components import conversation
-from homeassistant.components.conversation.models import ConversationResponse
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_LLM_HASS_API, CONF_PROMPT, MATCH_ALL
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import intent
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .const import CONF_SHOW_TOOL_CALLS, DEFAULT_SHOW_TOOL_CALLS, DOMAIN
@@ -82,9 +82,6 @@ class LmStudioConversationEntity(
         result = conversation.async_get_result_from_chat_log(user_input, chat_log)
 
         if not settings.get(CONF_SHOW_TOOL_CALLS, DEFAULT_SHOW_TOOL_CALLS):
-            result.response = ConversationResponse(
-                response_type=conversation.ResponseType.ACTION_FINISH,
-                data=None,
-            )
+            result.response.response_type = intent.IntentResponseType.QUERY_ANSWER
 
         return result
