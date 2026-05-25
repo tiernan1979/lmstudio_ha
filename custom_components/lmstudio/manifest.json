@@ -1,7 +1,7 @@
 {
   "domain": "lmstudio",
   "name": "LM Studio",
-  "version": "0.3.4",
+  "version": "0.3.5",
   "description": "Integrates LM Studio with Home Assistant using local LLMs.",
   "requirements": [],
   "config_flow": true,
