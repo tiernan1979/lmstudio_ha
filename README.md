@@ -133,7 +133,8 @@ The following tools are always available to the LLM — no Home Assistant API ac
 |------|-------------|
 | `get_current_time` | Returns the current date, time, and timezone |
 | `get_current_date` | Returns today's date |
-| `get_live_context` | Searches all Home Assistant entities in a given domain (e.g., `light`, `switch`, `sensor`). Use this to discover entity IDs and friendly names before controlling devices. |
+| `get_live_context` | Searches all Home Assistant entities in a given domain (e.g., `light`, `switch`, `sensor`, `climate`). Use this to discover entity IDs and friendly names before controlling devices. |
+| `get_latest_news` | Returns news results if LM Studio has a web search provider configured via MCP. Otherwise returns a helpful notice. |
 
 ### Entity Resolution / Fuzzy Matching
 

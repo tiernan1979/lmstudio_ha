@@ -56,6 +56,10 @@ BUILTIN_TOOLS = {
             "required": ["domain"],
         },
     },
+    "get_latest_news": {
+        "description": "Get the latest news. Requires a web search provider configured in LM Studio's MCP settings.",
+        "parameters": {"type": "object", "properties": {}},
+    },
 }
 
 
@@ -204,6 +208,10 @@ def _execute_builtin_tool(tool_name: str, args: dict, hass) -> dict:
             "count": len(entities),
             "entities": entities,
         }
+    if tool_name == "get_latest_news":
+        return {
+            "error": "Internet search is not configured. Set up a web search provider in LM Studio's MCP settings to enable news searches."
+        }
     return {"error": f"Unknown builtin tool: {tool_name}"}
 
 
@@ -291,10 +299,16 @@ class LmStudioBaseLLMEntity(Entity):
                 f"\n\nCurrent date and time: {now.strftime('%A, %B %d, %Y at %I:%M %p')}\n"
                 f"Timezone: {hass.config.time_zone}\n"
             )
+            tool_tips = (
+                "\n\nWhen controlling devices, first use get_live_context to discover entity IDs.\n"
+                "Only include non-empty parameters in tool calls — omit optional parameters that have no value.\n"
+                "For climate devices, use HassSetClimateMode to set hvac_mode (heat/cool/auto/off).\n"
+                "Always prefer calling services via the provided Hass* tools rather than HassCallService."
+            )
             system_msgs = [m for m in messages if m.get("role") == "system"]
             if system_msgs:
                 system_msgs[-1]["content"] = (
-                    (system_msgs[-1].get("content") or "") + time_context
+                    (system_msgs[-1].get("content") or "") + time_context + tool_tips
                 )
 
         max_messages = int(settings.get(CONF_MAX_HISTORY, DEFAULT_MAX_HISTORY))
