@@ -102,7 +102,7 @@ class LMStudioClient:
         _LOGGER.info("Unloading model %s", model_id)
         async with session.post(
             f"{self.url}/api/v1/models/unload",
-            json={"model": model_id},
+            json={"instance_id": model_id},
             headers=self._headers(),
         ) as resp:
             if resp.status >= 400:
