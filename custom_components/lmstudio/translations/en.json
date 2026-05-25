@@ -72,6 +72,7 @@
             "model": "Model",
             "name": "Name",
             "prompt": "Prompt template",
+            "show_tool_calls": "Show tool call details",
             "streaming": "Streaming"
           },
           "data_description": {
@@ -81,6 +82,7 @@
             "llm_hass_api": "Choose which Home Assistant APIs the model can access to control devices and query state.",
             "max_history": "Maximum number of previous conversation exchanges to keep in context.",
             "prompt": "Custom instructions for how the LLM should behave and respond. Leave empty for default.",
+            "show_tool_calls": "When enabled, the response will include details about which tools were called and their results.",
             "streaming": "Stream tokens back to the user in real-time as they are generated."
           }
         }

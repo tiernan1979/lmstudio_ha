@@ -8,7 +8,7 @@ from homeassistant.const import CONF_LLM_HASS_API, CONF_PROMPT, MATCH_ALL
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
-from .const import DOMAIN
+from .const import CONF_SHOW_TOOL_CALLS, DEFAULT_SHOW_TOOL_CALLS, DOMAIN
 from .entity import LmStudioBaseLLMEntity
 
 
@@ -78,4 +78,13 @@ class LmStudioConversationEntity(
 
         await self._async_handle_chat_log(chat_log)
 
-        return conversation.async_get_result_from_chat_log(user_input, chat_log)
+        result = conversation.async_get_result_from_chat_log(user_input, chat_log)
+
+        if not settings.get(CONF_SHOW_TOOL_CALLS, DEFAULT_SHOW_TOOL_CALLS):
+            if result.response and result.response.response_type == conversation.ResponseType.ACTION_DONE:
+                result.response = conversation.ConversationResponse(
+                    response_type=conversation.ResponseType.ACTION_FINISH,
+                    data=None,
+                )
+
+        return result

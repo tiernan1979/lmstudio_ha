@@ -30,7 +30,7 @@ from .const import (
     DOMAIN,
 )
 
-MAX_TOOL_ITERATIONS = 10
+MAX_TOOL_ITERATIONS = 3
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -352,6 +352,12 @@ class LmStudioBaseLLMEntity(Entity):
 
             if not chat_log.unresponded_tool_results:
                 break
+        else:
+            _LOGGER.error("Tool call iteration limit (%d) exceeded", MAX_TOOL_ITERATIONS)
+            raise HomeAssistantError(
+                "The model did not complete its response within the allowed number of tool call rounds. "
+                "Try asking a simpler question or check the model's tool use capabilities."
+            )
 
     def _trim_history(
         self, messages: list[dict], max_messages: int

@@ -38,6 +38,7 @@ from .const import (
     CONF_FLASH_ATTENTION,
     CONF_IDLE_TIMEOUT,
     CONF_MAX_HISTORY,
+    CONF_SHOW_TOOL_CALLS,
     CONF_STREAMING,
     DEFAULT_AI_TASK_NAME,
     DEFAULT_CONVERSATION_NAME,
@@ -46,6 +47,7 @@ from .const import (
     DEFAULT_IDLE_TIMEOUT,
     DEFAULT_MAX_HISTORY,
     DEFAULT_NAME,
+    DEFAULT_SHOW_TOOL_CALLS,
     DEFAULT_STREAMING,
     DEFAULT_TIMEOUT,
     DOMAIN,
@@ -288,6 +290,12 @@ def _subentry_config_option_schema(
         CONF_STREAMING,
         default=options.get(CONF_STREAMING, DEFAULT_STREAMING),
     )] = BooleanSelector()
+
+    if subentry_type == "conversation":
+        schema[vol.Optional(
+            CONF_SHOW_TOOL_CALLS,
+            default=options.get(CONF_SHOW_TOOL_CALLS, DEFAULT_SHOW_TOOL_CALLS),
+        )] = BooleanSelector()
 
     schema[vol.Optional(
         CONF_IDLE_TIMEOUT,
