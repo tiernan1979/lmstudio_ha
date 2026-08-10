@@ -2,7 +2,7 @@
 
 Integrate local large language models from [LM Studio](https://lmstudio.ai/) with Home Assistant. Chat with your LLM through the Home Assistant UI, voice assistants, or any conversation client — and have it query states, control devices, and call services in your smart home.
 
-![Version](https://img.shields.io/badge/version-2.0.0-blue)
+![Version](https://img.shields.io/badge/version-0.3.6-blue)
 ![Platform](https://img.shields.io/badge/platform-Home%20Assistant-orange)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
