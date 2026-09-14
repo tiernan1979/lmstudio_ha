@@ -7,7 +7,7 @@ from collections.abc import AsyncGenerator, AsyncIterator, Callable
 from typing import Any
 
 import voluptuous as vol
-from voluptuous_openapi import convert
+from probatio import to_openapi
 
 from homeassistant.components import conversation
 from homeassistant.config_entries import ConfigEntry, ConfigSubentry
@@ -70,7 +70,7 @@ def _format_tool(
         "type": "function",
         "function": {
             "name": tool.name,
-            "parameters": convert(tool.parameters, custom_serializer=custom_serializer),
+            "parameters": to_openapi(tool.parameters, custom_serializer=custom_serializer),
         },
     }
     if tool.description:
@@ -318,7 +318,7 @@ class LmStudioBaseLLMEntity(Entity):
         self._trim_history(messages, max_messages)
 
         if structure:
-            output_format = convert(
+            output_format = to_openapi(
                 structure,
                 custom_serializer=(
                     chat_log.llm_api.custom_serializer

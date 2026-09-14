@@ -16,15 +16,25 @@ from .entity import LmStudioBaseLLMEntity
 
 
 def _strip_tool_content(chat_log: conversation.ChatLog) -> None:
-    stripped: list[conversation.Content] = []
+    essential: list[conversation.Content] = []
+    last_user: conversation.Content | None = None
+    last_assistant: conversation.Content | None = None
     for c in chat_log.content:
         if isinstance(c, conversation.ToolResultContent):
             continue
-        if isinstance(c, conversation.AssistantContent) and c.tool_calls:
-            stripped.append(dataclasses.replace(c, tool_calls=None))
+        if isinstance(c, conversation.AssistantContent) and c.tool_calls and not c.content:
             continue
-        stripped.append(c)
-    chat_log.content = stripped
+        if isinstance(c, conversation.AssistantContent):
+            last_assistant = dataclasses.replace(c, tool_calls=None) if c.tool_calls else c
+        if isinstance(c, conversation.UserContent):
+            last_user = c
+        if isinstance(c, conversation.SystemContent):
+            essential.append(c)
+    if last_user is not None:
+        essential.append(last_user)
+    if last_assistant is not None:
+        essential.append(last_assistant)
+    chat_log.content = essential
 
 
 async def async_setup_entry(

@@ -4,7 +4,6 @@ import asyncio
 import logging
 from collections.abc import Mapping
 from typing import Any
-from urllib.parse import urlparse
 
 import aiohttp
 import voluptuous as vol
@@ -70,14 +69,6 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
 )
 
 
-def _server_label(url: str) -> str:
-    """Build a short, human-readable label for a server URL (host[:port])."""
-    parsed = urlparse(url)
-    host = parsed.hostname or url
-    port = f":{parsed.port}" if parsed.port else ""
-    return f"{host}{port}"
-
-
 class LMStudioConfigFlow(ConfigFlow, domain=DOMAIN):
     VERSION = 1
 
@@ -141,12 +132,7 @@ class LMStudioConfigFlow(ConfigFlow, domain=DOMAIN):
         if api_key:
             entry_data[CONF_API_KEY] = api_key
 
-        # Give each server entry a unique, identifiable title (host[:port])
-        # instead of the static DEFAULT_NAME, so multiple LM Studio servers
-        # can be told apart in the UI when adding conversation agents / AI tasks.
-        title = f"{DEFAULT_NAME} ({_server_label(url)})"
-
-        return self.async_create_entry(title=title, data=entry_data)
+        return self.async_create_entry(title=DEFAULT_NAME, data=entry_data)
 
     @classmethod
     @callback
@@ -209,15 +195,7 @@ class LMStudioSubentryFlowHandler(ConfigSubentryFlow):
             if self._subentry_type == "conversation" and self._name == DEFAULT_CONVERSATION_NAME:
                 model = user_input.get(CONF_MODEL, "")
                 model_short = model.partition(":")[0].strip()
-                # Include the server's host/port so identically-named models
-                # loaded on different LM Studio servers don't produce
-                # duplicate agent names.
-                entry = self._get_entry()
-                server_label = _server_label(entry.data[CONF_URL])
-                if model_short:
-                    self._name = f"LM Studio {server_label} {model_short}"
-                else:
-                    self._name = f"LM Studio {server_label}"
+                self._name = f"LM Studio {model_short}" if model_short else DEFAULT_CONVERSATION_NAME
 
             return self.async_create_entry(
                 title=self._name,
